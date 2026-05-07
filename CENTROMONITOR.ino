@@ -95,6 +95,12 @@ bool inMenu = false;
 
 bool lastButtonState = false;
 
+// calibracion touch (ajustar si tu panel difiere)
+const int TOUCH_MIN_X = 200;
+const int TOUCH_MAX_X = 3800;
+const int TOUCH_MIN_Y = 200;
+const int TOUCH_MAX_Y = 3800;
+
 // =====================================================
 // ================= FUNCIONES ==========================
 // =====================================================
@@ -175,6 +181,23 @@ float calculateVPD(float temp, float hum) {
 }
 
 // =====================================================
+
+bool readTouchScreen(int &tx, int &ty) {
+
+  if(!ts.touched()) return false;
+
+  TS_Point p = ts.getPoint();
+
+  tx = map(p.x, TOUCH_MIN_X, TOUCH_MAX_X, 0, 320);
+  ty = map(p.y, TOUCH_MIN_Y, TOUCH_MAX_Y, 0, 240);
+
+  tx = constrain(tx, 0, 319);
+  ty = constrain(ty, 0, 239);
+
+  return true;
+}
+
+// =====================================================
 // ================= SETUP ==============================
 // =====================================================
 
@@ -203,7 +226,7 @@ void setup() {
 
   ts.begin();
 
-  ts.setRotation(1);
+  ts.setRotation(3);
 
   // ================= ADS1115 =================
 
@@ -356,17 +379,6 @@ void loop() {
 
   tft.fillScreen(MI_NEGRO);
 
-  // filas visuales
-  tft.fillRoundRect(5,   5, 310, 24, 4, ROW1);
-  tft.fillRoundRect(5,  33, 310, 24, 4, ROW2);
-  tft.fillRoundRect(5,  61, 310, 24, 4, ROW3);
-  tft.fillRoundRect(5,  89, 310, 24, 4, ROW4);
-  tft.fillRoundRect(5, 117, 310, 24, 4, ROW5);
-  tft.fillRoundRect(5, 145, 310, 24, 4, ROW6);
-  tft.fillRoundRect(5, 173, 310, 24, 4, ROW7);
-  tft.fillRoundRect(5, 201, 310, 24, 4, ROW8);
-  tft.fillRoundRect(5, 229, 310, 24, 4, ROW9);
-
   tft.setTextColor(MI_BLANCO);
 
   tft.setTextSize(2);
@@ -445,13 +457,13 @@ void loop() {
     tft.print("%");
 
     // boton +
-    tft.fillRoundRect(
+    tft.drawRoundRect(
       185,
       165,
       40,
       35,
       4,
-      MI_MORADO
+      MI_BLANCO
     );
 
     tft.setCursor(200, 175);
@@ -459,13 +471,13 @@ void loop() {
     tft.print("+");
 
     // boton -
-    tft.fillRoundRect(
+    tft.drawRoundRect(
       250,
       165,
       40,
       35,
       4,
-      MI_NARANJA
+      MI_BLANCO
     );
 
     tft.setCursor(265, 175);
@@ -476,13 +488,9 @@ void loop() {
     // ================= TOUCH TFT =====================
     // =================================================
 
-    if(ts.touched()) {
-
-      TS_Point p = ts.getPoint();
-
-      int tx = map(p.y, 200, 3800, 320, 0);
-
-      int ty = map(p.x, 200, 3800, 0, 240);
+    int tx = 0;
+    int ty = 0;
+    if(readTouchScreen(tx, ty)) {
 
       // boton +
       if(tx > 185 && tx < 225 &&
@@ -504,7 +512,7 @@ void loop() {
           soilThreshold = 5;
       }
 
-      delay(200);
+      delay(180);
     }
   }
 
