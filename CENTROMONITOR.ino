@@ -195,7 +195,7 @@ void setup() {
   tft.init(240, 320);
 
   // CAMBIA 0 1 2 3 PARA GIRAR
-  tft.setRotation(1);
+  tft.setRotation(3);
 
   tft.fillScreen(MI_NEGRO);
 
