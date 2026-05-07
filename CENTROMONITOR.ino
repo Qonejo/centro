@@ -191,19 +191,35 @@ float calculateVPD(float temp, float hum) {
 
 bool readTouchScreen(int &tx, int &ty) {
 
-  if(!ts.touched()) return false;
+  if(!ts.touched())
+    return false;
 
-  if(millis() - lastTouchRead < 40) return false;
+  if(millis() - lastTouchRead < 40)
+    return false;
 
   TS_Point p = ts.getPoint();
 
-  // Corregir espejo/rotacion real del panel.
-  tx = map(p.y, TOUCH_MAX_Y, TOUCH_MIN_Y, 0, 320);
-  ty = map(p.x, TOUCH_MAX_X, TOUCH_MIN_X, 0, 240);
+  // =========================================
+  // ===== MAPEO CORRECTO ROTATION 3 =========
+  // =========================================
 
+  tx = map(p.x, 200, 3800, 320, 0);
+
+  ty = map(p.y, 200, 3800, 0, 240);
+
+  // limitar
   tx = constrain(tx, 0, 319);
+
   ty = constrain(ty, 0, 239);
+
   lastTouchRead = millis();
+
+  // DEBUG SERIAL
+  Serial.print("TX: ");
+  Serial.print(tx);
+
+  Serial.print(" TY: ");
+  Serial.println(ty);
 
   return true;
 }
