@@ -17,6 +17,11 @@
 #define MI_BLANCO  0xFFFF
 #define MI_MORADO  0xA01F
 #define MI_NARANJA 0xFD20
+#define MI_VERDE   0x07E0
+#define MI_CYAN    0x07FF
+#define MI_ROJO    0xF800
+#define MI_AZUL    0x001F
+#define MI_AMARILLO 0xFFE0
 
 #define ROW1 0x18C3
 #define ROW2 0x2104
@@ -35,7 +40,7 @@
 #define TFT_CS     15
 #define TFT_RST     4
 #define TFT_DC      2
-#define TOUCH_CS    5
+#define TOUCH_CS   14
 
 // =====================================================
 // ================= GPIO ===============================
@@ -94,6 +99,11 @@ bool humidifierState = false;
 bool inMenu = false;
 
 bool lastButtonState = false;
+
+unsigned long touchDotStart = 0;
+bool touchDotVisible = false;
+int lastTouchX = -1;
+int lastTouchY = -1;
 
 // calibracion touch (ajustar si tu panel difiere)
 const int TOUCH_MIN_X = 200;
@@ -197,6 +207,48 @@ bool readTouchScreen(int &tx, int &ty) {
   return true;
 }
 
+void drawStaticUI() {
+
+  tft.fillScreen(MI_NEGRO);
+
+  tft.setTextSize(2);
+  tft.setTextColor(MI_AMARILLO);
+  tft.setCursor(10, 10);
+  tft.print("Hora:");
+
+  tft.setTextColor(MI_NARANJA);
+  tft.setCursor(10, 38);
+  tft.print("Temp:");
+
+  tft.setTextColor(MI_CYAN);
+  tft.setCursor(10, 66);
+  tft.print("Hum:");
+
+  tft.setTextColor(MI_MORADO);
+  tft.setCursor(10, 94);
+  tft.print("VPD:");
+
+  tft.setTextColor(MI_VERDE);
+  tft.setCursor(10, 122);
+  tft.print("Soil1:");
+
+  tft.setTextColor(MI_AZUL);
+  tft.setCursor(10, 150);
+  tft.print("Soil2:");
+
+  tft.setTextColor(MI_ROJO);
+  tft.setCursor(10, 178);
+  tft.print("pH:");
+
+  tft.setTextColor(MI_BLANCO);
+  tft.setCursor(10, 206);
+  tft.print("TDS:");
+
+  tft.setTextColor(MI_AMARILLO);
+  tft.setCursor(10, 234);
+  tft.print("Riego:");
+}
+
 // =====================================================
 // ================= SETUP ==============================
 // =====================================================
@@ -266,6 +318,8 @@ void setup() {
   tft.println("INICIANDO");
 
   delay(2000);
+
+  drawStaticUI();
 }
 
 // =====================================================
@@ -377,45 +431,59 @@ void loop() {
   // ================= PANTALLA =======================
   // =================================================
 
-  tft.fillScreen(MI_NEGRO);
-
-  tft.setTextColor(MI_BLANCO);
-
   tft.setTextSize(2);
 
   // =================================================
   // ================= DATOS ==========================
   // =================================================
 
-  tft.setCursor(10, 10);
-  tft.printf("Hora: %02d:%02d:%02d",
+  tft.fillRect(70, 10, 150, 18, MI_NEGRO);
+  tft.setTextColor(MI_AMARILLO);
+  tft.setCursor(70, 10);
+  tft.printf("%02d:%02d:%02d",
              now.hour(),
              now.minute(),
              now.second());
 
-  tft.setCursor(10, 38);
-  tft.printf("Temp: %.1f C", airTemp);
+  tft.fillRect(70, 38, 150, 18, MI_NEGRO);
+  tft.setTextColor(MI_NARANJA);
+  tft.setCursor(70, 38);
+  tft.printf("%.1f C", airTemp);
 
-  tft.setCursor(10, 66);
-  tft.printf("Hum: %.1f %%", airHum);
+  tft.fillRect(70, 66, 150, 18, MI_NEGRO);
+  tft.setTextColor(MI_CYAN);
+  tft.setCursor(70, 66);
+  tft.printf("%.1f %%", airHum);
 
-  tft.setCursor(10, 94);
-  tft.printf("VPD: %.2f", vpd);
+  tft.fillRect(70, 94, 150, 18, MI_NEGRO);
+  tft.setTextColor(MI_MORADO);
+  tft.setCursor(70, 94);
+  tft.printf("%.2f", vpd);
 
-  tft.setCursor(10, 122);
-  tft.printf("Soil1: %.0f %%", soil1);
+  tft.fillRect(70, 122, 150, 18, MI_NEGRO);
+  tft.setTextColor(MI_VERDE);
+  tft.setCursor(70, 122);
+  tft.printf("%.0f %%", soil1);
 
-  tft.setCursor(10, 150);
-  tft.printf("Soil2: %.0f %%", soil2);
+  tft.fillRect(70, 150, 150, 18, MI_NEGRO);
+  tft.setTextColor(MI_AZUL);
+  tft.setCursor(70, 150);
+  tft.printf("%.0f %%", soil2);
 
-  tft.setCursor(10, 178);
-  tft.printf("pH: %.2f", phValue);
+  tft.fillRect(70, 178, 150, 18, MI_NEGRO);
+  tft.setTextColor(MI_ROJO);
+  tft.setCursor(70, 178);
+  tft.printf("%.2f", phValue);
 
-  tft.setCursor(10, 206);
-  tft.printf("TDS: %.0f ppm", tdsValue);
+  tft.fillRect(70, 206, 170, 18, MI_NEGRO);
+  tft.setTextColor(MI_BLANCO);
+  tft.setCursor(70, 206);
+  tft.printf("%.0f ppm", tdsValue);
 
-  tft.setCursor(10, 234);
-  tft.printf("Riego:%s",
+  tft.fillRect(80, 234, 90, 18, MI_NEGRO);
+  tft.setTextColor(relayState ? MI_VERDE : MI_ROJO);
+  tft.setCursor(80, 234);
+  tft.printf("%s",
              relayState ? "ON" : "OFF");
 
   // =================================================
@@ -512,8 +580,19 @@ void loop() {
           soilThreshold = 5;
       }
 
-      delay(180);
+      tft.fillCircle(tx, ty, 3, MI_BLANCO);
+      lastTouchX = tx;
+      lastTouchY = ty;
+      touchDotStart = millis();
+      touchDotVisible = true;
+
+      delay(120);
     }
+  }
+
+  if(touchDotVisible && millis() - touchDotStart >= 1000) {
+    tft.fillCircle(lastTouchX, lastTouchY, 3, MI_NEGRO);
+    touchDotVisible = false;
   }
 
   // =================================================
@@ -541,5 +620,5 @@ void loop() {
   Serial.print("  VPD: ");
   Serial.println(vpd);
 
-  delay(1000);
+  delay(80);
 }
