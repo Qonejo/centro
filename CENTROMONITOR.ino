@@ -101,6 +101,10 @@ bool inMenu = false;
 bool lastButtonState = false;
 
 unsigned long lastTouchRead = 0;
+int touchDotX = -1;
+int touchDotY = -1;
+
+unsigned long touchDotTime = 0;
 
 // calibracion touch (ajustar si tu panel difiere)
 const int TOUCH_MIN_X = 200;
@@ -194,7 +198,7 @@ bool readTouchScreen(int &tx, int &ty) {
   if(!ts.touched())
     return false;
 
-  if(millis() - lastTouchRead < 40)
+  if(millis() - lastTouchRead < 60)
     return false;
 
   TS_Point p = ts.getPoint();
@@ -203,22 +207,20 @@ bool readTouchScreen(int &tx, int &ty) {
   // ===== MAPEO CORRECTO ROTATION 3 =========
   // =========================================
 
-  tx = map(p.x, 200, 3800, 320, 0);
+  tx = map(p.x, 200, 3800, 319, 0);
 
-  ty = map(p.y, 200, 3800, 0, 240);
+  ty = map(p.y, 200, 3800, 239, 0);
 
-  // limitar
   tx = constrain(tx, 0, 319);
 
   ty = constrain(ty, 0, 239);
 
   lastTouchRead = millis();
 
-  // DEBUG SERIAL
-  Serial.print("TX: ");
+  Serial.print("TX:");
   Serial.print(tx);
 
-  Serial.print(" TY: ");
+  Serial.print(" TY:");
   Serial.println(ty);
 
   return true;
@@ -336,6 +338,7 @@ void loop() {
   if(currentButton && !lastButtonState) {
 
     inMenu = !inMenu;
+    drawStaticUI();
 
     delay(300);
   }
@@ -558,6 +561,10 @@ void loop() {
     int tx = 0;
     int ty = 0;
     if(readTouchScreen(tx, ty)) {
+      touchDotX = tx;
+      touchDotY = ty;
+
+      touchDotTime = millis();
 
       // boton +
       if(tx > 185 && tx < 225 &&
@@ -581,6 +588,22 @@ void loop() {
 
       delay(70);
     }
+  }
+
+  // =========================================
+  // ===== TOUCH VISUAL ======================
+  // =========================================
+
+  if(millis() - touchDotTime < 1000 &&
+     touchDotX >= 0 &&
+     touchDotY >= 0) {
+
+    tft.fillCircle(
+      touchDotX,
+      touchDotY,
+      5,
+      MI_AMARILLO
+    );
   }
 
   // =================================================
