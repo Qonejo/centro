@@ -17,6 +17,12 @@
 #define MI_BLANCO  0xFFFF
 #define MI_MORADO  0xA01F
 #define MI_NARANJA 0xFD20
+#define MI_AZUL_FONDO 0x0841
+#define MI_CIAN    0x07FF
+#define MI_VERDE   0x07E0
+#define MI_AMARILLO 0xFFE0
+#define MI_ROJO    0xF800
+#define MI_ROSA    0xF81F
 
 #define ROW1 0x18C3
 #define ROW2 0x2104
@@ -35,7 +41,7 @@
 #define TFT_CS     15
 #define TFT_RST     4
 #define TFT_DC      2
-#define TOUCH_CS    5
+#define TOUCH_CS    14
 
 // =====================================================
 // ================= GPIO ===============================
@@ -94,6 +100,18 @@ bool humidifierState = false;
 bool inMenu = false;
 
 bool lastButtonState = false;
+bool dotVisible = false;
+int dotX = 0;
+int dotY = 0;
+unsigned long dotStartMs = 0;
+unsigned long lastSensorReadMs = 0;
+unsigned long lastClockDrawMs = 0;
+
+// calibracion touch (ajustar si tu panel difiere)
+const int TOUCH_MIN_X = 200;
+const int TOUCH_MAX_X = 3800;
+const int TOUCH_MIN_Y = 200;
+const int TOUCH_MAX_Y = 3800;
 
 // =====================================================
 // ================= FUNCIONES ==========================
@@ -175,6 +193,23 @@ float calculateVPD(float temp, float hum) {
 }
 
 // =====================================================
+
+bool readTouchScreen(int &tx, int &ty) {
+
+  if(!ts.touched()) return false;
+
+  TS_Point p = ts.getPoint();
+
+  tx = map(p.x, TOUCH_MIN_X, TOUCH_MAX_X, 0, 320);
+  ty = map(p.y, TOUCH_MIN_Y, TOUCH_MAX_Y, 0, 240);
+
+  tx = constrain(tx, 0, 319);
+  ty = constrain(ty, 0, 239);
+
+  return true;
+}
+
+// =====================================================
 // ================= SETUP ==============================
 // =====================================================
 
@@ -203,7 +238,7 @@ void setup() {
 
   ts.begin();
 
-  ts.setRotation(1);
+  ts.setRotation(3);
 
   // ================= ADS1115 =================
 
@@ -270,43 +305,25 @@ void loop() {
   // ================= AM2320 =========================
   // =================================================
 
-  am2320.readTemperature();
+  unsigned long nowMs = millis();
+  if(nowMs - lastSensorReadMs >= 1000 || lastSensorReadMs == 0) {
+    lastSensorReadMs = nowMs;
 
-  delay(10);
+    am2320.readTemperature();
+    delay(10);
 
-  float t = am2320.readTemperature();
+    float t = am2320.readTemperature();
+    float h = am2320.readHumidity();
 
-  float h = am2320.readHumidity();
+    if(!isnan(t)) airTemp = t;
+    if(!isnan(h)) airHum = h;
 
-  if(!isnan(t)) airTemp = t;
-
-  if(!isnan(h)) airHum = h;
-
-  // =================================================
-  // ================= SUELO ==========================
-  // =================================================
-
-  soil1 = readSoilPercent(0);
-
-  soil2 = readSoilPercent(1);
-
-  // =================================================
-  // ================= PH =============================
-  // =================================================
-
-  phValue = readPH();
-
-  // =================================================
-  // ================= TDS ============================
-  // =================================================
-
-  tdsValue = readTDS();
-
-  // =================================================
-  // ================= VPD ============================
-  // =================================================
-
-  vpd = calculateVPD(airTemp, airHum);
+    soil1 = readSoilPercent(0);
+    soil2 = readSoilPercent(1);
+    phValue = readPH();
+    tdsValue = readTDS();
+    vpd = calculateVPD(airTemp, airHum);
+  }
 
   // =================================================
   // ================= RELE ===========================
@@ -354,20 +371,9 @@ void loop() {
   // ================= PANTALLA =======================
   // =================================================
 
-  tft.fillScreen(MI_NEGRO);
-
-  // filas visuales
-  tft.fillRoundRect(5,   5, 310, 24, 4, ROW1);
-  tft.fillRoundRect(5,  33, 310, 24, 4, ROW2);
-  tft.fillRoundRect(5,  61, 310, 24, 4, ROW3);
-  tft.fillRoundRect(5,  89, 310, 24, 4, ROW4);
-  tft.fillRoundRect(5, 117, 310, 24, 4, ROW5);
-  tft.fillRoundRect(5, 145, 310, 24, 4, ROW6);
-  tft.fillRoundRect(5, 173, 310, 24, 4, ROW7);
-  tft.fillRoundRect(5, 201, 310, 24, 4, ROW8);
-  tft.fillRoundRect(5, 229, 310, 24, 4, ROW9);
-
-  tft.setTextColor(MI_BLANCO);
+  if(lastClockDrawMs == 0) {
+    tft.fillScreen(MI_AZUL_FONDO);
+  }
 
   tft.setTextSize(2);
 
@@ -375,36 +381,49 @@ void loop() {
   // ================= DATOS ==========================
   // =================================================
 
-  tft.setCursor(10, 10);
-  tft.printf("Hora: %02d:%02d:%02d",
-             now.hour(),
-             now.minute(),
-             now.second());
+  if(nowMs - lastClockDrawMs >= 250 || lastClockDrawMs == 0) {
+    lastClockDrawMs = nowMs;
+    tft.fillRect(0, 0, 320, 240, MI_AZUL_FONDO);
 
-  tft.setCursor(10, 38);
-  tft.printf("Temp: %.1f C", airTemp);
+    tft.setTextColor(MI_BLANCO, MI_AZUL_FONDO);
+    tft.setCursor(10, 10);
+    tft.printf("Hora: %02d:%02d:%02d",
+               now.hour(),
+               now.minute(),
+               now.second());
 
-  tft.setCursor(10, 66);
-  tft.printf("Hum: %.1f %%", airHum);
+    tft.setTextColor(MI_CIAN, MI_AZUL_FONDO);
+    tft.setCursor(10, 38);
+    tft.printf("Temp: %.1f C", airTemp);
 
-  tft.setCursor(10, 94);
-  tft.printf("VPD: %.2f", vpd);
+    tft.setTextColor(MI_VERDE, MI_AZUL_FONDO);
+    tft.setCursor(10, 66);
+    tft.printf("Hum: %.1f %%", airHum);
 
-  tft.setCursor(10, 122);
-  tft.printf("Soil1: %.0f %%", soil1);
+    tft.setTextColor(MI_AMARILLO, MI_AZUL_FONDO);
+    tft.setCursor(10, 94);
+    tft.printf("VPD: %.2f", vpd);
 
-  tft.setCursor(10, 150);
-  tft.printf("Soil2: %.0f %%", soil2);
+    tft.setTextColor(MI_NARANJA, MI_AZUL_FONDO);
+    tft.setCursor(10, 122);
+    tft.printf("Soil1: %.0f %%", soil1);
 
-  tft.setCursor(10, 178);
-  tft.printf("pH: %.2f", phValue);
+    tft.setTextColor(MI_MORADO, MI_AZUL_FONDO);
+    tft.setCursor(10, 150);
+    tft.printf("Soil2: %.0f %%", soil2);
 
-  tft.setCursor(10, 206);
-  tft.printf("TDS: %.0f ppm", tdsValue);
+    tft.setTextColor(MI_ROSA, MI_AZUL_FONDO);
+    tft.setCursor(10, 178);
+    tft.printf("pH: %.2f", phValue);
 
-  tft.setCursor(10, 234);
-  tft.printf("Riego:%s",
-             relayState ? "ON" : "OFF");
+    tft.setTextColor(MI_ROJO, MI_AZUL_FONDO);
+    tft.setCursor(10, 206);
+    tft.printf("TDS: %.0f ppm", tdsValue);
+
+    tft.setTextColor(MI_BLANCO, MI_AZUL_FONDO);
+    tft.setCursor(10, 234);
+    tft.printf("Riego:%s", relayState ? "ON" : "OFF");
+  }
 
   // =================================================
   // ================= MENU ===========================
@@ -445,13 +464,13 @@ void loop() {
     tft.print("%");
 
     // boton +
-    tft.fillRoundRect(
+    tft.drawRoundRect(
       185,
       165,
       40,
       35,
       4,
-      MI_MORADO
+      MI_BLANCO
     );
 
     tft.setCursor(200, 175);
@@ -459,13 +478,13 @@ void loop() {
     tft.print("+");
 
     // boton -
-    tft.fillRoundRect(
+    tft.drawRoundRect(
       250,
       165,
       40,
       35,
       4,
-      MI_NARANJA
+      MI_BLANCO
     );
 
     tft.setCursor(265, 175);
@@ -476,13 +495,9 @@ void loop() {
     // ================= TOUCH TFT =====================
     // =================================================
 
-    if(ts.touched()) {
-
-      TS_Point p = ts.getPoint();
-
-      int tx = map(p.y, 200, 3800, 320, 0);
-
-      int ty = map(p.x, 200, 3800, 0, 240);
+    int tx = 0;
+    int ty = 0;
+    if(readTouchScreen(tx, ty)) {
 
       // boton +
       if(tx > 185 && tx < 225 &&
@@ -504,8 +519,18 @@ void loop() {
           soilThreshold = 5;
       }
 
-      delay(200);
+      dotX = tx;
+      dotY = ty;
+      dotVisible = true;
+      dotStartMs = millis();
+      tft.fillCircle(dotX, dotY, 4, MI_BLANCO);
+      delay(120);
     }
+  }
+
+  if(dotVisible && (millis() - dotStartMs >= 1000)) {
+    tft.fillCircle(dotX, dotY, 4, MI_AZUL_FONDO);
+    dotVisible = false;
   }
 
   // =================================================
@@ -533,5 +558,5 @@ void loop() {
   Serial.print("  VPD: ");
   Serial.println(vpd);
 
-  delay(1000);
+  delay(20);
 }
