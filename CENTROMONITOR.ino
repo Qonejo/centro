@@ -8,6 +8,8 @@
 #include <Adafruit_AM2320.h>
 #include <Adafruit_ADS1X15.h>
 #include <RTClib.h>
+#include <WiFi.h>
+#include <esp_now.h>
 
 // =====================================================
 // ================== COLORES ===========================
@@ -79,6 +81,43 @@ float phValue = 0;
 float tdsValue = 0;
 
 float vpd = 0;
+
+
+typedef struct struct_message {
+
+    int lightHours;
+    int darkHours;
+
+    int daysVeg;
+    int daysFlower;
+
+    bool isVegetative;
+    bool inLightMode;
+
+    float progressPercent;
+
+    int hour;
+    int minute;
+    int second;
+
+} struct_message;
+
+int remoteLightHours = 0;
+int remoteDarkHours = 0;
+
+int remoteDaysVeg = 0;
+int remoteDaysFlower = 0;
+
+bool remoteVegetative = true;
+bool remoteLightMode = true;
+
+float remoteProgress = 0;
+
+int remoteHour = 0;
+int remoteMinute = 0;
+int remoteSecond = 0;
+
+unsigned long lastEspNowReceiveMs = 0;
 
 // =====================================================
 // ================= CONFIG =============================
@@ -250,6 +289,64 @@ void drawStaticUI() {
   }
 }
 
+
+void OnDataRecv(
+    const esp_now_recv_info_t *info,
+    const uint8_t *incomingData,
+    int len
+) {
+
+  if(len != sizeof(struct_message)) {
+    Serial.print("ESP-NOW len invalido: ");
+    Serial.println(len);
+    return;
+  }
+
+  struct_message incomingMessage;
+  memcpy(&incomingMessage, incomingData, sizeof(incomingMessage));
+
+  remoteLightHours = incomingMessage.lightHours;
+  remoteDarkHours = incomingMessage.darkHours;
+
+  remoteDaysVeg = incomingMessage.daysVeg;
+  remoteDaysFlower = incomingMessage.daysFlower;
+
+  remoteVegetative = incomingMessage.isVegetative;
+  remoteLightMode = incomingMessage.inLightMode;
+
+  remoteProgress = incomingMessage.progressPercent;
+
+  remoteHour = incomingMessage.hour;
+  remoteMinute = incomingMessage.minute;
+  remoteSecond = incomingMessage.second;
+
+  lastEspNowReceiveMs = millis();
+
+  Serial.print("ESP-NOW RX ");
+  if(info && info->src_addr) {
+    Serial.printf("%02X:%02X:%02X:%02X:%02X:%02X",
+                  info->src_addr[0],
+                  info->src_addr[1],
+                  info->src_addr[2],
+                  info->src_addr[3],
+                  info->src_addr[4],
+                  info->src_addr[5]);
+  }
+
+  Serial.print(" | C:");
+  Serial.print(remoteLightHours);
+  Serial.print("/");
+  Serial.print(remoteDarkHours);
+  Serial.print(" h Veg:");
+  Serial.print(remoteDaysVeg);
+  Serial.print(" Flo:");
+  Serial.print(remoteDaysFlower);
+  Serial.print(" Prog:");
+  Serial.print(remoteProgress, 1);
+  Serial.print("% Hora:");
+  Serial.printf("%02d:%02d:%02d\n", remoteHour, remoteMinute, remoteSecond);
+}
+
 // =====================================================
 // ================= SETUP ==============================
 // =====================================================
@@ -300,6 +397,19 @@ void setup() {
   pinMode(HUMIDIFIER_PIN, OUTPUT);
 
   pinMode(MENU_BUTTON_PIN, INPUT);
+
+
+  WiFi.mode(WIFI_STA);
+
+  if(esp_now_init() != ESP_OK) {
+    Serial.println("Error inicializando ESP-NOW");
+  } else {
+    esp_now_register_recv_cb(OnDataRecv);
+    Serial.println("ESP-NOW receptor listo");
+    Serial.println("MAC receptor esperada: 00:4B:12:3D:19:FC");
+    Serial.print("MAC STA actual: ");
+    Serial.println(WiFi.macAddress());
+  }
 
   // relay active low
   digitalWrite(RELAY_PIN, HIGH);
@@ -487,6 +597,25 @@ void loop() {
   tft.setCursor(172, 206);
   tft.printf("%s",
              relayState ? "ON" : "OFF");
+
+  bool espNowConnected = (millis() - lastEspNowReceiveMs) <= 10000;
+
+  tft.fillCircle(315, 6, 4, espNowConnected ? MI_VERDE : MI_ROJO);
+
+  tft.fillRect(0, 232, 320, 8, MI_NEGRO);
+  tft.setTextSize(1);
+  tft.setTextColor(MI_BLANCO, MI_NEGRO);
+  tft.setCursor(2, 232);
+  tft.printf("R %s %02d:%02d:%02d C%d/%d V%d F%d P%.1f%%",
+             remoteLightMode ? "L" : "D",
+             remoteHour,
+             remoteMinute,
+             remoteSecond,
+             remoteLightHours,
+             remoteDarkHours,
+             remoteDaysVeg,
+             remoteDaysFlower,
+             remoteProgress);
 
   // =================================================
   // ================= MENU ===========================
