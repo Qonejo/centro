@@ -24,9 +24,6 @@
 #define MI_PINK     0xF81F
 #define MI_ORQ      0x8A5F
 
-#define TFT_CS      5
-#define TFT_RST     4
-#define TFT_DC      27
 #define TOUCH_CS    14
 
 #define RELAY_PIN       25
