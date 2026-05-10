@@ -254,9 +254,11 @@ void OnDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, in
 void setup() {
   Serial.begin(115200);
   Wire.begin(21, 22);
-  SPI.begin(18, 19, 23);
+  Serial.println("BOOT 1");
   tft.init();
+  Serial.println("BOOT 2");
   tft.setRotation(3);
+  Serial.println("BOOT 3");
   ts.begin();
   ts.setRotation(4);
   ads.begin();
@@ -396,9 +398,9 @@ void loop() {
   }
 
   if (millis() - touchDotTime < 200 && touchDotX >= 0 && touchDotY >= 0) {
-    overlaySprite.fillSprite(TFT_TRANSPARENT);
+    overlaySprite.fillSprite(MI_NEGRO);
     overlaySprite.fillCircle(7, 7, 5, MI_AMARILLO);
-    overlaySprite.pushSprite(touchDotX - 7, touchDotY - 7, TFT_TRANSPARENT);
+    overlaySprite.pushSprite(touchDotX - 7, touchDotY - 7);
   } else if (touchDotX >= 0 && touchDotY >= 0) {
     tft.fillRect(touchDotX - 7, touchDotY - 7, 14, 14, MI_NEGRO);
     if (inMenu) menuSprite.pushSprite(176, 84);
