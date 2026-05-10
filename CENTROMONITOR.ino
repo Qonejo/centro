@@ -257,7 +257,7 @@ void setup() {
   tft.init(240, 320);
   tft.setRotation(3);
   ts.begin();
-  ts.setRotation(3);
+  ts.setRotation(4);
   ads.begin();
   rtc.begin();
   am2320.begin();
