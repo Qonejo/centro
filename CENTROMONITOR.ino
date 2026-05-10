@@ -34,6 +34,7 @@
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite menuSprite = TFT_eSprite(&tft);
 TFT_eSprite overlaySprite = TFT_eSprite(&tft);
+TFT_eSprite valueSprite = TFT_eSprite(&tft);
 XPT2046_Touchscreen ts(TOUCH_CS);
 Adafruit_AM2320 am2320 = Adafruit_AM2320();
 Adafruit_ADS1115 ads;
@@ -88,7 +89,8 @@ bool menuNeedsRedraw = true;
 bool menuVisible = false;
 
 float lastAirTemp = -999, lastAirHum = -999, lastSoil1 = -999, lastSoil2 = -999, lastPh = -999, lastTds = -999, lastVpd = -999;
-bool lastRelayState = false, lastHumidifierState = false;
+bool lastRelayState = false, lastHumidifierState = false, lastSyncState = false;
+uint16_t lastRelayColor = 0;
 int lastHour = -1, lastMinute = -1, lastSecond = -1;
 
 float readTDS() {
@@ -144,6 +146,13 @@ uint16_t soilColor(float val) {
 }
 
 
+void drawHUDCorners(int x, int y, int w, int h, int len, uint16_t color) {
+  tft.drawLine(x, y, x + len, y, color); tft.drawLine(x, y, x, y + len, color);
+  tft.drawLine(x + w - 1, y, x + w - 1 - len, y, color); tft.drawLine(x + w - 1, y, x + w - 1, y + len, color);
+  tft.drawLine(x, y + h - 1, x + len, y + h - 1, color); tft.drawLine(x, y + h - 1, x, y + h - 1 - len, color);
+  tft.drawLine(x + w - 1, y + h - 1, x + w - 1 - len, y + h - 1, color); tft.drawLine(x + w - 1, y + h - 1, x + w - 1, y + h - 1 - len, color);
+}
+
 void gradientRoundRect(TFT_eSPI &scr, int x, int y, int w, int h, int radius, uint16_t cTop, uint16_t cBottom) {
   for (int i = 0; i < h; i += 2) {
     uint8_t r1 = (cTop >> 11) & 0x1F, g1 = (cTop >> 5) & 0x3F, b1 = cTop & 0x1F;
@@ -155,7 +164,6 @@ void gradientRoundRect(TFT_eSPI &scr, int x, int y, int w, int h, int radius, ui
     scr.drawFastHLine(x + 2, y + 1 + i, w - 4, c);
   }
   scr.drawRoundRect(x, y, w, h, radius, MI_CYAN);
-  scr.drawRoundRect(x + 1, y + 1, w - 2, h - 2, radius - 1, MI_GRIS3);
 }
 
 void drawStaticBackground() {
@@ -163,61 +171,114 @@ void drawStaticBackground() {
   for (int i = 0; i < 240; i += 16) tft.drawFastHLine(0, i, 320, MI_GRIS2);
   for (int i = 0; i < 320; i += 24) tft.drawFastVLine(i, 0, 240, MI_GRIS1);
 
-  gradientRoundRect(tft, 4, 4, 312, 40, 10, MI_CYAN, MI_AZUL);
-  tft.drawLine(112, 10, 112, 46, MI_GRIS3);
+  gradientRoundRect(tft, 4, 4, 312, 40, 8, MI_GRIS1, MI_NEGRO);
+  drawHUDCorners(4, 4, 312, 40, 10, MI_CYAN);
+  tft.drawLine(112, 10, 112, 38, MI_GRIS3);
   tft.drawLine(188, 10, 188, 38, MI_GRIS3);
   tft.drawLine(252, 10, 252, 38, MI_GRIS3);
   tft.setTextSize(1);
-  tft.setTextColor(MI_BLANCO, MI_NEGRO);
+  tft.setTextColor(MI_CYAN, MI_NEGRO);
   tft.setCursor(12, 10); tft.print("SYNC");
   tft.setCursor(122, 10); tft.print("TEMP");
   tft.setCursor(198, 10); tft.print("HUM");
   tft.setCursor(260, 10); tft.print("VPD");
 
-  gradientRoundRect(tft, 4, 48, 156, 124, 10, MI_AZUL, MI_MORADO);
+  gradientRoundRect(tft, 4, 48, 156, 124, 8, MI_GRIS1, MI_NEGRO);
+  drawHUDCorners(4, 48, 156, 124, 15, MI_AZUL);
+  tft.setTextColor(MI_BLANCO, MI_NEGRO);
   tft.setCursor(12, 62); tft.print("SOIL 1");
   tft.setCursor(88, 62); tft.print("SOIL 2");
 
-  gradientRoundRect(tft, 244, 48, 72, 124, 10, MI_MORADO, MI_CYAN);
+  gradientRoundRect(tft, 244, 48, 72, 124, 8, MI_GRIS1, MI_NEGRO);
+  drawHUDCorners(244, 48, 72, 124, 12, MI_MORADO);
   tft.setTextColor(MI_PINK, MI_NEGRO);
-  tft.setCursor(252, 62); tft.print("pH/TDS");
+  tft.setCursor(250, 62); tft.print("pH/TDS");
 
-  gradientRoundRect(tft, 4, 176, 236, 60, 10, MI_CYAN, MI_MORADO);
-  tft.fillRoundRect(252, 196, 58, 28, 8, MI_AZUL);
-  tft.drawRoundRect(252, 196, 58, 28, 8, MI_CYAN);
+  gradientRoundRect(tft, 4, 176, 236, 60, 8, MI_GRIS1, MI_NEGRO);
+  drawHUDCorners(4, 176, 236, 60, 15, MI_CYAN);
+
+  tft.fillRoundRect(252, 196, 58, 28, 4, MI_AZUL);
+  tft.drawRoundRect(252, 196, 58, 28, 4, MI_CYAN);
   tft.setTextColor(MI_BLANCO, MI_AZUL);
-  tft.setCursor(265, 206); tft.print("RIEGO");
+  tft.setCursor(262, 206); tft.print("RIEGO");
 
   tft.drawCircle(306, 14, 5, MI_CYAN);
   tft.drawCircle(306, 30, 5, MI_CYAN);
   tft.drawCircle(306, 46, 5, MI_CYAN);
 }
 
-void restoreMenuRegion() {
-  int x = 176, y = 84, w = 126, h = 116;
+void restoreArea(int x, int y, int w, int h) {
   tft.fillRect(x, y, w, h, MI_NEGRO);
-  for (int yy = y; yy < y + h; yy += 16) tft.drawFastHLine(x, yy, w, MI_GRIS2);
-  for (int xx = x; xx < x + w; xx += 24) tft.drawFastVLine(xx, y, h, MI_GRIS1);
-  tft.drawRoundRect(244, 48, 72, 124, 10, MI_CYAN);
-  tft.drawRoundRect(245, 49, 70, 122, 9, MI_GRIS3);
+  for (int i = 0; i < 240; i += 16) {
+    if (i >= y && i < y + h) tft.drawFastHLine(x, i, w, MI_GRIS2);
+  }
+  for (int i = 0; i < 320; i += 24) {
+    if (i >= x && i < x + w) tft.drawFastVLine(i, y, h, MI_GRIS1);
+  }
+
+  // Restore card borders and corners if they intersect the area
+  if (y < 44 && (y + h) > 4 && x < 316 && (x + w) > 4) {
+    tft.drawRoundRect(4, 4, 312, 40, 8, MI_CYAN);
+    drawHUDCorners(4, 4, 312, 40, 10, MI_CYAN);
+    tft.drawLine(112, 10, 112, 38, MI_GRIS3);
+    tft.drawLine(188, 10, 188, 38, MI_GRIS3);
+    tft.drawLine(252, 10, 252, 38, MI_GRIS3);
+  }
+  if (y < 172 && (y + h) > 48) {
+    if (x < 160 && (x + w) > 4) {
+      tft.drawRoundRect(4, 48, 156, 124, 8, MI_CYAN);
+      drawHUDCorners(4, 48, 156, 124, 15, MI_AZUL);
+    }
+    if (x < 316 && (x + w) > 244) {
+      tft.drawRoundRect(244, 48, 72, 124, 8, MI_CYAN);
+      drawHUDCorners(244, 48, 72, 124, 12, MI_MORADO);
+    }
+  }
+  if (y < 236 && (y + h) > 176 && x < 240 && (x + w) > 4) {
+    tft.drawRoundRect(4, 176, 236, 60, 8, MI_CYAN);
+    drawHUDCorners(4, 176, 236, 60, 15, MI_CYAN);
+  }
+  if (y < 224 && (y + h) > 196 && x < 310 && (x + w) > 252) {
+    tft.fillRoundRect(252, 196, 58, 28, 4, MI_AZUL);
+    tft.drawRoundRect(252, 196, 58, 28, 4, MI_CYAN);
+    tft.setTextColor(MI_BLANCO, MI_AZUL);
+    tft.setTextSize(1);
+    tft.setCursor(262, 206); tft.print("RIEGO");
+  }
 }
 
 
 
+void pushValue(int x, int y, int w, int h, String text, uint16_t color, uint8_t size, uint16_t bgColor) {
+  valueSprite.createSprite(w, h); // Resize to fit
+  valueSprite.fillSprite(bgColor);
+  valueSprite.setTextColor(color);
+  valueSprite.setTextSize(size);
+  valueSprite.setTextDatum(MC_DATUM);
+  valueSprite.drawString(text, w / 2, h / 2);
+  valueSprite.pushSprite(x, y);
+}
+
 void drawSoilBar(int x, int y, int w, int h, float value, float lastValue, const char *label) {
   if (fabs(value - lastValue) < 0.5) return;
   uint16_t color = soilColor(value);
-  tft.fillRect(x, y, w, h, MI_GRIS2);
+
+  // Bar area
+  tft.fillRect(x, y, w, h, MI_NEGRO);
+  for (int i = y; i < y + h; i += 4) tft.drawFastHLine(x, i, w, MI_GRIS1);
+
   int fillH = (int)((h - 4) * (value / 100.0));
   tft.fillRect(x + 2, y + h - 2 - fillH, w - 4, fillH, color);
-  tft.drawRect(x, y, w, h, MI_CYAN);
+  tft.drawRoundRect(x, y, w, h, 3, MI_CYAN);
+
+  // Label
   tft.setTextSize(1);
-  tft.setTextColor(MI_BLANCO, MI_GRIS1);
-  tft.setCursor(x, y + h + 4); tft.print(label);
-  tft.setTextSize(2);
-  tft.setTextColor(color, MI_GRIS1);
-  tft.fillRect(x - 2, y - 22, w + 10, 18, MI_GRIS1);
-  tft.setCursor(x, y - 20); tft.printf("%2.0f%%", value);
+  tft.setTextColor(MI_BLANCO, MI_NEGRO);
+  tft.setCursor(x + 10, y + h + 6); tft.print(label);
+
+  // Value using sprite
+  char valStr[8]; sprintf(valStr, "%2.0f%%", value);
+  pushValue(x - 5, y - 25, 54, 20, String(valStr), color, 2, MI_NEGRO);
 }
 
 void OnDataSent(
@@ -280,8 +341,10 @@ void setup() {
   digitalWrite(HUMIDIFIER_PIN, LOW);
   menuSprite.setColorDepth(16);
   overlaySprite.setColorDepth(16);
-  menuSprite.createSprite(126, 116);
-  overlaySprite.createSprite(14, 14);
+  valueSprite.setColorDepth(16);
+  menuSprite.createSprite(140, 110);
+  overlaySprite.createSprite(20, 20);
+  valueSprite.createSprite(80, 30);
   drawStaticBackground();
 }
 
@@ -292,7 +355,7 @@ void loop() {
     lastMenuDebounceMs = millis();
     menuNeedsRedraw = true;
     if (!inMenu && menuVisible) {
-      restoreMenuRegion();
+      restoreArea(176, 84, 140, 110);
       menuVisible = false;
     }
   }
@@ -326,30 +389,58 @@ void loop() {
   int uiHour = remoteHour, uiMinute = remoteMinute, uiSecond = remoteSecond;
 
   if (uiSecond != lastSecond) {
-    tft.setTextSize(1); tft.setTextColor(MI_BLANCO, MI_GRIS1);
-    tft.fillRect(12, 24, 96, 10, MI_GRIS1);
-    tft.setCursor(12, 24); tft.printf("%02d:%02d:%02d", uiHour, uiMinute, uiSecond);
+    char timeStr[10];
+    sprintf(timeStr, "%02d:%02d:%02d", uiHour, uiMinute, uiSecond);
+    pushValue(12, 24, 70, 15, String(timeStr), MI_BLANCO, 1, MI_NEGRO);
     lastHour = uiHour; lastMinute = uiMinute; lastSecond = uiSecond;
   }
 
-  if (fabs(airTemp - lastAirTemp) > 0.09) { tft.setTextSize(2); tft.setTextColor(MI_AMARILLO, MI_GRIS1); tft.fillRect(120, 20, 64, 16, MI_GRIS1); tft.setCursor(120, 20); tft.printf("%2.1fC", airTemp); lastAirTemp = airTemp; }
-  if (fabs(airHum - lastAirHum) > 0.09) { tft.setTextSize(2); tft.setTextColor(MI_CYAN, MI_GRIS1); tft.fillRect(196, 20, 52, 16, MI_GRIS1); tft.setCursor(196, 20); tft.printf("%2.0f%%", airHum); lastAirHum = airHum; }
-  if (fabs(vpd - lastVpd) > 0.02) { tft.setTextSize(2); tft.setTextColor(MI_MORADO, MI_GRIS1); tft.fillRect(258, 20, 52, 16, MI_GRIS1); tft.setCursor(258, 20); tft.printf("%.2f", vpd); lastVpd = vpd; }
+  if (fabs(airTemp - lastAirTemp) > 0.09) {
+    char valStr[10]; sprintf(valStr, "%2.1fC", airTemp);
+    pushValue(116, 20, 68, 18, String(valStr), MI_AMARILLO, 2, MI_NEGRO);
+    lastAirTemp = airTemp;
+  }
+  if (fabs(airHum - lastAirHum) > 0.09) {
+    char valStr[10]; sprintf(valStr, "%2.0f%%", airHum);
+    pushValue(192, 20, 56, 18, String(valStr), MI_CYAN, 2, MI_NEGRO);
+    lastAirHum = airHum;
+  }
+  if (fabs(vpd - lastVpd) > 0.02) {
+    char valStr[10]; sprintf(valStr, "%.2f", vpd);
+    pushValue(256, 20, 56, 18, String(valStr), MI_MORADO, 2, MI_NEGRO);
+    lastVpd = vpd;
+  }
 
   drawSoilBar(18, 84, 44, 74, soil1, lastSoil1, "S1");
   drawSoilBar(84, 84, 44, 74, soil2, lastSoil2, "S2");
   lastSoil1 = soil1; lastSoil2 = soil2;
 
-  if (fabs(phValue - lastPh) > 0.02) { tft.setTextSize(2); tft.setTextColor(MI_PINK, MI_GRIS1); tft.fillRect(252, 84, 60, 18, MI_GRIS1); tft.setCursor(252, 84); tft.printf("pH %.2f", phValue); lastPh = phValue; }
-  if (fabs(tdsValue - lastTds) > 3) { tft.setTextSize(1); tft.setTextColor(MI_BLANCO, MI_GRIS1); tft.fillRect(252, 110, 60, 16, MI_GRIS1); tft.setCursor(252, 112); tft.printf("TDS %.0f", tdsValue); lastTds = tdsValue; }
+  if (fabs(phValue - lastPh) > 0.02) {
+    char valStr[10]; sprintf(valStr, "%.2f", phValue);
+    pushValue(248, 84, 64, 18, String(valStr), MI_PINK, 2, MI_NEGRO);
+    lastPh = phValue;
+  }
+  if (fabs(tdsValue - lastTds) > 3) {
+    char valStr[10]; sprintf(valStr, "%.0f", tdsValue);
+    pushValue(248, 112, 64, 15, String(valStr), MI_BLANCO, 1, MI_NEGRO);
+    lastTds = tdsValue;
+  }
 
-  if (relayState != lastRelayState || manualWatering) {
-    uint16_t relayColor = manualWatering ? MI_CYAN : (relayState ? MI_VERDE : MI_ROJO);
-    tft.fillCircle(306, 30, 4, relayColor);
+  uint16_t currentRelayColor = manualWatering ? MI_CYAN : (relayState ? MI_VERDE : MI_ROJO);
+  if (currentRelayColor != lastRelayColor) {
+    tft.fillCircle(306, 30, 4, currentRelayColor);
+    lastRelayColor = currentRelayColor;
     lastRelayState = relayState;
   }
-  if (humidifierState != lastHumidifierState) { tft.fillCircle(306, 46, 4, humidifierState ? MI_AZUL : MI_ROJO); lastHumidifierState = humidifierState; }
-  tft.fillCircle(306, 14, 4, (millis() - lastEspNowReceiveMs) <= 10000 ? MI_VERDE : MI_ROJO);
+  if (humidifierState != lastHumidifierState) {
+    tft.fillCircle(306, 46, 4, humidifierState ? MI_AZUL : MI_ROJO);
+    lastHumidifierState = humidifierState;
+  }
+  bool currentSyncState = (millis() - lastEspNowReceiveMs) <= 10000;
+  if (currentSyncState != lastSyncState) {
+    tft.fillCircle(306, 14, 4, currentSyncState ? MI_VERDE : MI_ROJO);
+    lastSyncState = currentSyncState;
+  }
 
   greenhouseData.vpd = vpd;
   greenhouseData.tds = tdsValue;
@@ -380,14 +471,14 @@ void loop() {
   if (inMenu) {
     if (menuNeedsRedraw) {
       menuSprite.fillSprite(MI_NEGRO);
-      menuSprite.drawRoundRect(0, 0, 126, 116, 8, MI_CYAN);
+      menuSprite.drawRoundRect(0, 0, 140, 110, 8, MI_CYAN);
       menuSprite.setTextColor(MI_BLANCO, MI_NEGRO); menuSprite.setTextSize(1);
-      menuSprite.setCursor(32, 10); menuSprite.print("SET SOIL");
+      menuSprite.setCursor(40, 10); menuSprite.print("SET SOIL");
       menuSprite.setTextSize(2);
-      menuSprite.setCursor(38, 36); menuSprite.print(soilThreshold, 0); menuSprite.print("%");
-      menuSprite.drawRoundRect(9, 76, 40, 35, 4, MI_CYAN); menuSprite.setCursor(24, 86); menuSprite.print("+");
-      menuSprite.drawRoundRect(74, 76, 40, 35, 4, MI_CYAN); menuSprite.setCursor(89, 86); menuSprite.print("-");
-      menuSprite.setTextSize(1); menuSprite.setCursor(110, 6); menuSprite.print("X");
+      menuSprite.setCursor(48, 36); menuSprite.print(soilThreshold, 0); menuSprite.print("%");
+      menuSprite.drawRoundRect(15, 70, 45, 30, 4, MI_CYAN); menuSprite.setCursor(30, 78); menuSprite.print("+");
+      menuSprite.drawRoundRect(80, 70, 45, 30, 4, MI_CYAN); menuSprite.setCursor(95, 78); menuSprite.print("-");
+      menuSprite.setTextSize(1); menuSprite.setCursor(125, 6); menuSprite.print("X");
       menuNeedsRedraw = false;
     }
     menuSprite.pushSprite(176, 84);
@@ -396,10 +487,10 @@ void loop() {
 
   if (millis() - touchDotTime < 200 && touchDotX >= 0 && touchDotY >= 0) {
     overlaySprite.fillSprite(MI_NEGRO);
-    overlaySprite.fillCircle(7, 7, 5, MI_AMARILLO);
-    overlaySprite.pushSprite(touchDotX - 7, touchDotY - 7);
+    overlaySprite.fillCircle(10, 10, 6, MI_AMARILLO);
+    overlaySprite.pushSprite(touchDotX - 10, touchDotY - 10);
   } else if (touchDotX >= 0 && touchDotY >= 0) {
-    tft.fillRect(touchDotX - 7, touchDotY - 7, 14, 14, MI_NEGRO);
+    restoreArea(touchDotX - 10, touchDotY - 10, 20, 20);
     if (inMenu) menuSprite.pushSprite(176, 84);
     touchDotX = -1;
     touchDotY = -1;
