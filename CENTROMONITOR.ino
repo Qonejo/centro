@@ -3,7 +3,7 @@
 #include <math.h>
 
 #include <Adafruit_GFX.h>
-#include <Adafruit_ST7789.h>
+#include <Adafruit_ILI9341.h>
 #include <XPT2046_Touchscreen.h>
 #include <Adafruit_AM2320.h>
 #include <Adafruit_ADS1X15.h>
@@ -39,9 +39,9 @@
 // ================= TFT ================================
 // =====================================================
 
-#define TFT_CS     15
+#define TFT_CS      5
 #define TFT_RST     4
-#define TFT_DC      2
+#define TFT_DC      27
 #define TOUCH_CS   14
 
 // =====================================================
@@ -57,7 +57,7 @@
 // ================= OBJETOS ============================
 // =====================================================
 
-Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
+Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
 
 XPT2046_Touchscreen ts(TOUCH_CS);
 
@@ -243,12 +243,12 @@ bool readTouchScreen(int &tx, int &ty) {
   TS_Point p = ts.getPoint();
 
   // =========================================
-  // ===== MAPEO CORRECTO ROTATION 3 =========
+  // ===== MAPEO CORRECTO ROTATION 1 =========
   // =========================================
 
-  tx = map(p.x, 200, 3800, 319, 0);
+  tx = map(p.x, TOUCH_MIN_X, TOUCH_MAX_X, 0, 319);
 
-  ty = map(p.y, 200, 3800, 239, 0);
+  ty = map(p.y, TOUCH_MIN_Y, TOUCH_MAX_Y, 0, 239);
 
   tx = constrain(tx, 0, 319);
 
@@ -365,10 +365,10 @@ void setup() {
 
   // ================= TFT =================
 
-  tft.init(240, 320);
+  tft.begin();
 
   // CAMBIA 0 1 2 3 PARA GIRAR
-  tft.setRotation(3);
+  tft.setRotation(1);
 
   tft.fillScreen(MI_NEGRO);
 
@@ -376,7 +376,7 @@ void setup() {
 
   ts.begin();
 
-  ts.setRotation(3);
+  ts.setRotation(1);
 
   // ================= ADS1115 =================
 
