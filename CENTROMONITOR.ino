@@ -82,7 +82,9 @@ bool relayState = false, humidifierState = false, inMenu = false, lastButtonStat
 bool espNowLastSendOk = false;
 bool manualWatering = false;
 int touchDotX = -1, touchDotY = -1;
+int lastTouchDotX = -1, lastTouchDotY = -1;
 unsigned long manualWaterStart = 0;
+unsigned long lastTouchDotDrawnAt = 0;
 
 float lastAirTemp = -999, lastAirHum = -999, lastSoil1 = -999, lastSoil2 = -999, lastPh = -999, lastTds = -999, lastVpd = -999;
 bool lastRelayState = false, lastHumidifierState = false;
@@ -142,13 +144,30 @@ uint16_t soilColor(float val) {
 }
 
 void drawCard(int x, int y, int w, int h) {
-  tft.fillRoundRect(x, y, w, h, 10, MI_GRIS1);
+  tft.fillRoundRect(x + 2, y + 3, w, h, 10, MI_NEGRO);
+  tft.fillRoundRect(x + 1, y + 2, w, h, 10, MI_GRIS2);
   tft.drawRoundRect(x, y, w, h, 10, MI_CYAN);
   tft.drawRoundRect(x + 1, y + 1, w - 2, h - 2, 9, MI_GRIS3);
 }
 
+void drawGradientCard(int x, int y, int w, int h, uint16_t c1, uint16_t c2) {
+  tft.fillRoundRect(x + 2, y + 3, w, h, 10, MI_NEGRO);
+  for (int i = 0; i < h; i += 2) {
+    uint8_t r1 = (c1 >> 11) & 0x1F, g1 = (c1 >> 5) & 0x3F, b1 = c1 & 0x1F;
+    uint8_t r2 = (c2 >> 11) & 0x1F, g2 = (c2 >> 5) & 0x3F, b2 = c2 & 0x1F;
+    uint8_t r = r1 + ((r2 - r1) * i) / h;
+    uint8_t g = g1 + ((g2 - g1) * i) / h;
+    uint8_t b = b1 + ((b2 - b1) * i) / h;
+    uint16_t c = (r << 11) | (g << 5) | b;
+    tft.drawFastHLine(x + 2, y + 1 + i, w - 4, c);
+  }
+  tft.drawRoundRect(x, y, w, h, 10, MI_CYAN);
+  tft.drawRoundRect(x + 1, y + 1, w - 2, h - 2, 9, MI_GRIS3);
+  tft.drawRoundRect(x - 1, y - 1, w + 2, h + 2, 11, MI_AZUL);
+}
+
 void drawTopPanel() {
-  drawCard(4, 4, 312, 40);
+  drawGradientCard(4, 4, 312, 40, MI_GRIS1, MI_GRIS2);
   tft.drawLine(112, 10, 112, 46, MI_GRIS3);
   tft.drawLine(188, 10, 188, 38, MI_GRIS3);
   tft.drawLine(252, 10, 252, 38, MI_GRIS3);
@@ -161,7 +180,7 @@ void drawTopPanel() {
 }
 
 void drawSoilCards() {
-  drawCard(4, 48, 156, 124);
+  drawGradientCard(4, 48, 156, 124, MI_GRIS1, MI_GRIS2);
   tft.setTextSize(1);
   tft.setTextColor(MI_BLANCO, MI_GRIS1);
   tft.setCursor(12, 62); tft.print("SOIL 1");
@@ -169,7 +188,7 @@ void drawSoilCards() {
 }
 
 void drawWaterPanel() {
-  drawCard(244, 48, 72, 124);
+  drawGradientCard(244, 48, 72, 124, MI_GRIS1, MI_GRIS2);
   tft.setTextSize(1);
   tft.setTextColor(MI_PINK, MI_GRIS1);
   tft.setCursor(252, 62); tft.print("pH/TDS");
@@ -182,13 +201,7 @@ void drawStatusIndicators() {
 }
 
 void drawBottomButtons() {
-  drawCard(4, 176, 236, 60);
-  tft.fillRoundRect(14, 188, 160, 36, 8, MI_MORADO);
-  tft.drawRoundRect(14, 188, 160, 36, 8, MI_CYAN);
-  tft.setTextSize(2);
-  tft.setTextColor(MI_BLANCO, MI_MORADO);
-  tft.setCursor(38, 200); tft.print("SET SOIL");
-
+  drawGradientCard(4, 176, 236, 60, MI_GRIS1, MI_GRIS2);
   tft.fillRoundRect(252, 196, 58, 28, 8, MI_AZUL);
   tft.drawRoundRect(252, 196, 58, 28, 8, MI_CYAN);
   tft.setTextSize(1);
@@ -198,12 +211,42 @@ void drawBottomButtons() {
 
 void drawModernUI() {
   tft.fillScreen(MI_NEGRO);
-  for (int i = 0; i < 240; i += 16) tft.drawFastHLine(0, i, 320, MI_GRIS1);
+  for (int i = 0; i < 240; i += 16) tft.drawFastHLine(0, i, 320, MI_GRIS2);
+  for (int i = 0; i < 320; i += 24) tft.drawFastVLine(i, 0, 240, MI_GRIS1);
   drawTopPanel();
   drawSoilCards();
   drawWaterPanel();
   drawBottomButtons();
   drawStatusIndicators();
+}
+
+void restoreMainUIArea() {
+  drawGradientCard(176, 84, 126, 116, MI_GRIS1, MI_GRIS2);
+  lastPh = -999;
+  lastTds = -999;
+}
+
+void restoreTouchBackgroundAt(int x, int y) {
+  if (x < 0 || y < 0) return;
+  if (y >= 176 && x <= 240) {
+    drawGradientCard(4, 176, 236, 60, MI_GRIS1, MI_GRIS2);
+  } else if (x >= 244 && y >= 48 && y <= 172) {
+    drawGradientCard(244, 48, 72, 124, MI_GRIS1, MI_GRIS2);
+    lastPh = -999;
+    lastTds = -999;
+  } else if (x <= 160 && y >= 48 && y <= 172) {
+    drawGradientCard(4, 48, 156, 124, MI_GRIS1, MI_GRIS2);
+    lastSoil1 = -999;
+    lastSoil2 = -999;
+  } else if (y <= 44) {
+    drawGradientCard(4, 4, 312, 40, MI_GRIS1, MI_GRIS2);
+    lastSecond = -1;
+    lastAirTemp = -999;
+    lastAirHum = -999;
+    lastVpd = -999;
+  } else {
+    tft.fillRect(x - 6, y - 6, 12, 12, MI_NEGRO);
+  }
 }
 
 void drawSoilBar(int x, int y, int w, int h, float value, float lastValue, const char *label) {
@@ -285,7 +328,7 @@ void loop() {
   bool currentButton = digitalRead(MENU_BUTTON_PIN);
   if (currentButton && !lastButtonState) {
     inMenu = !inMenu;
-    drawModernUI();
+    if (!inMenu) restoreMainUIArea();
     delay(300);
   }
   lastButtonState = currentButton;
@@ -365,7 +408,6 @@ void loop() {
       manualWatering = true;
       manualWaterStart = millis();
     }
-    if (!inMenu && tx > 14 && tx < 174 && ty > 188 && ty < 224) inMenu = true;
     if (inMenu && tx > 280 && tx < 306 && ty > 82 && ty < 102) inMenu = false;
     if (inMenu && tx > 185 && tx < 225 && ty > 165 && ty < 200) { soilThreshold++; if (soilThreshold > 95) soilThreshold = 95; }
     if (inMenu && tx > 250 && tx < 290 && ty > 165 && ty < 200) { soilThreshold--; if (soilThreshold < 5) soilThreshold = 5; }
@@ -383,7 +425,20 @@ void loop() {
     tft.setTextSize(1); tft.setCursor(286, 90); tft.print("X");
   }
 
-  if (millis() - touchDotTime < 1000 && touchDotX >= 0 && touchDotY >= 0) tft.fillCircle(touchDotX, touchDotY, 5, MI_AMARILLO);
+  if (lastTouchDotX >= 0 && lastTouchDotY >= 0 && (millis() - lastTouchDotDrawnAt >= 200)) {
+    restoreTouchBackgroundAt(lastTouchDotX, lastTouchDotY);
+    lastTouchDotX = -1;
+    lastTouchDotY = -1;
+  }
+  if (millis() - touchDotTime < 200 && touchDotX >= 0 && touchDotY >= 0) {
+    if (lastTouchDotX >= 0 && lastTouchDotY >= 0) {
+      restoreTouchBackgroundAt(lastTouchDotX, lastTouchDotY);
+    }
+    tft.fillCircle(touchDotX, touchDotY, 5, MI_AMARILLO);
+    lastTouchDotX = touchDotX;
+    lastTouchDotY = touchDotY;
+    lastTouchDotDrawnAt = millis();
+  }
 
   delay(40);
 }
