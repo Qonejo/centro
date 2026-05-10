@@ -162,7 +162,6 @@ void drawTopPanel() {
 
 void drawSoilCards() {
   drawCard(4, 48, 156, 124);
-  drawCard(164, 48, 76, 124);
   tft.setTextSize(1);
   tft.setTextColor(MI_BLANCO, MI_GRIS1);
   tft.setCursor(12, 62); tft.print("SOIL 1");
@@ -183,17 +182,18 @@ void drawStatusIndicators() {
 }
 
 void drawBottomButtons() {
-  drawCard(4, 176, 152, 60);
-  drawCard(164, 176, 152, 60);
-  tft.fillRoundRect(14, 188, 132, 36, 8, MI_AZUL);
-  tft.drawRoundRect(14, 188, 132, 36, 8, MI_CYAN);
+  drawCard(4, 176, 236, 60);
+  tft.fillRoundRect(14, 188, 160, 36, 8, MI_MORADO);
+  tft.drawRoundRect(14, 188, 160, 36, 8, MI_CYAN);
   tft.setTextSize(2);
-  tft.setTextColor(MI_BLANCO, MI_AZUL);
-  tft.setCursor(46, 200); tft.print("RIEGO");
-  tft.fillRoundRect(174, 188, 132, 36, 8, MI_MORADO);
-  tft.drawRoundRect(174, 188, 132, 36, 8, MI_CYAN);
   tft.setTextColor(MI_BLANCO, MI_MORADO);
-  tft.setCursor(198, 200); tft.print("SET SOIL");
+  tft.setCursor(38, 200); tft.print("SET SOIL");
+
+  tft.fillRoundRect(252, 196, 58, 28, 8, MI_AZUL);
+  tft.drawRoundRect(252, 196, 58, 28, 8, MI_CYAN);
+  tft.setTextSize(1);
+  tft.setTextColor(MI_BLANCO, MI_AZUL);
+  tft.setCursor(265, 206); tft.print("RIEGO");
 }
 
 void drawModernUI() {
@@ -317,10 +317,6 @@ void loop() {
   if (airTemp <= 27) { digitalWrite(HUMIDIFIER_PIN, LOW); humidifierState = false; }
 
   int uiHour = remoteHour, uiMinute = remoteMinute, uiSecond = remoteSecond;
-  if (lastEspNowReceiveMs == 0 || millis() - lastEspNowReceiveMs > 12000) {
-    DateTime now = rtc.now();
-    uiHour = now.hour(); uiMinute = now.minute(); uiSecond = now.second();
-  }
 
   if (uiSecond != lastSecond) {
     tft.setTextSize(1); tft.setTextColor(MI_BLANCO, MI_GRIS1);
@@ -365,25 +361,26 @@ void loop() {
   int tx = 0, ty = 0;
   if (readTouchScreen(tx, ty)) {
     touchDotX = tx; touchDotY = ty; touchDotTime = millis();
-    if (!inMenu && tx > 14 && tx < 146 && ty > 188 && ty < 224) {
+    if (!inMenu && tx > 252 && tx < 310 && ty > 196 && ty < 224) {
       manualWatering = true;
       manualWaterStart = millis();
     }
-    if (!inMenu && tx > 174 && tx < 306 && ty > 188 && ty < 224) inMenu = true;
+    if (!inMenu && tx > 14 && tx < 174 && ty > 188 && ty < 224) inMenu = true;
     if (inMenu && tx > 280 && tx < 306 && ty > 82 && ty < 102) inMenu = false;
     if (inMenu && tx > 185 && tx < 225 && ty > 165 && ty < 200) { soilThreshold++; if (soilThreshold > 95) soilThreshold = 95; }
     if (inMenu && tx > 250 && tx < 290 && ty > 165 && ty < 200) { soilThreshold--; if (soilThreshold < 5) soilThreshold = 5; }
   }
 
   if (inMenu) {
-    tft.fillRoundRect(170, 76, 140, 132, 8, MI_NEGRO);
-    tft.drawRoundRect(170, 76, 140, 132, 8, MI_CYAN);
-    tft.setTextColor(MI_BLANCO, MI_NEGRO); tft.setTextSize(2);
-    tft.setCursor(182, 90); tft.print("SET SOIL");
-    tft.setCursor(205, 122); tft.print(soilThreshold, 0); tft.print("%");
+    tft.fillRoundRect(176, 84, 126, 116, 8, MI_NEGRO);
+    tft.drawRoundRect(176, 84, 126, 116, 8, MI_CYAN);
+    tft.setTextColor(MI_BLANCO, MI_NEGRO); tft.setTextSize(1);
+    tft.setCursor(208, 94); tft.print("SET SOIL");
+    tft.setTextSize(2);
+    tft.setCursor(214, 120); tft.print(soilThreshold, 0); tft.print("%");
     tft.drawRoundRect(185, 160, 40, 35, 4, MI_CYAN); tft.setCursor(200, 170); tft.print("+");
     tft.drawRoundRect(250, 160, 40, 35, 4, MI_CYAN); tft.setCursor(265, 170); tft.print("-");
-    tft.setTextSize(1); tft.setCursor(286, 84); tft.print("X");
+    tft.setTextSize(1); tft.setCursor(286, 90); tft.print("X");
   }
 
   if (millis() - touchDotTime < 1000 && touchDotX >= 0 && touchDotY >= 0) tft.fillCircle(touchDotX, touchDotY, 5, MI_AMARILLO);
