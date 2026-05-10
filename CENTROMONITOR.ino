@@ -213,7 +213,14 @@ void drawSoilBar(int x, int y, int w, int h, float value, float lastValue, const
   tft.setCursor(x, y - 20); tft.printf("%2.0f%%", value);
 }
 
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) { espNowLastSendOk = (status == ESP_NOW_SEND_SUCCESS); }
+void OnDataSent(
+    const wifi_tx_info_t *info,
+    esp_now_send_status_t status
+) {
+
+    espNowLastSendOk =
+        (status == ESP_NOW_SEND_SUCCESS);
+}
 
 void OnDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len) {
   if (len != sizeof(struct_message)) return;
