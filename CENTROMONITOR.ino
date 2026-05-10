@@ -37,7 +37,6 @@
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite menuSprite = TFT_eSprite(&tft);
 TFT_eSprite overlaySprite = TFT_eSprite(&tft);
-TFT_eSprite valueSprite = TFT_eSprite(&tft);
 XPT2046_Touchscreen ts(TOUCH_CS);
 Adafruit_AM2320 am2320 = Adafruit_AM2320();
 Adafruit_ADS1115 ads;
@@ -282,10 +281,8 @@ void setup() {
   digitalWrite(HUMIDIFIER_PIN, LOW);
   menuSprite.setColorDepth(16);
   overlaySprite.setColorDepth(16);
-  valueSprite.setColorDepth(16);
   menuSprite.createSprite(126, 116);
   overlaySprite.createSprite(14, 14);
-  valueSprite.createSprite(72, 24);
   drawStaticBackground();
 }
 
