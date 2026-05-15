@@ -18,10 +18,10 @@
 #define MI_AZUL     0x041F
 #define MI_AZUL2    0x02DF
 #define MI_AMARILLO 0xFFE0
-#define MI_GRIS0    0x0841
-#define MI_GRIS1    0x10A2
-#define MI_GRIS2    0x18E3
-#define MI_GRIS3    0x2124
+#define MI_GRIS0    0x0000
+#define MI_GRIS1    0x0821
+#define MI_GRIS2    0x1042
+#define MI_GRIS3    0x18C3
 #define MI_PINK     0xF81F
 
 #define TOUCH_CS    14
@@ -74,7 +74,7 @@ greenhouse_message greenhouseData;
 uint8_t macFotoperiodo[] = {0x00, 0x4B, 0x12, 0x3D, 0x19, 0xFC};
 uint8_t macSoilNode[] = {0xAC, 0xA7, 0x04, 0xB8, 0x0C, 0xAC};
 
-float airTemp = 0, airHum = 0, soil1 = 0, soil2 = 0, phValue = 0, tdsValue = 0, vpd = 0, pressureValue = 0;
+float airTemp = 0, airHum = 0, soil1 = 0, soil2 = 0, phValue = 0, tdsValue = 0, vpd = 0;
 float remoteSoil1 = 0, remoteSoil2 = 0;
 int remoteLightHours = 0, remoteDarkHours = 0, remoteDaysVeg = 0, remoteDaysFlower = 0;
 bool remoteVegetative = true, remoteLightMode = true;
@@ -96,7 +96,7 @@ unsigned long lastHeapLogMs = 0;
 bool menuNeedsRedraw = true;
 bool menuVisible = false;
 
-float lastAirTemp = -999, lastAirHum = -999, lastSoil1 = -999, lastSoil2 = -999, lastPh = -999, lastTds = -999, lastVpd = -999, lastPressure = -999;
+float lastAirTemp = -999, lastAirHum = -999, lastSoil1 = -999, lastSoil2 = -999, lastPh = -999, lastTds = -999, lastVpd = -999;
 int lastSecond = -1;
 
 const int BTN_RIEGO_X = 170, BTN_RIEGO_Y = 195, BTN_RIEGO_W = 70, BTN_RIEGO_H = 34;
@@ -158,16 +158,13 @@ void drawGlowBorder(int x, int y, int w, int h, uint16_t glowColor) {
 }
 
 void drawDarkCard(int x, int y, int w, int h, uint16_t top, uint16_t bottom, uint16_t glow) {
-  for (int i = 0; i < h; i++) {
-    uint16_t lineColor = blend565(top, bottom, (uint8_t)((255 * i) / h));
-    tft.drawFastHLine(x + 2, y + i, w - 4, lineColor);
-  }
-  tft.fillRoundRect(x, y, w, h, 8, MI_GRIS0);
+  tft.fillRoundRect(x, y, w, h, 8, MI_NEGRO);
   for (int i = 2; i < h - 2; i++) {
-    uint16_t lineColor = blend565(top, bottom, (uint8_t)((255 * i) / h));
+    uint16_t lineColor = blend565(top, bottom, (uint8_t)((255 * i) / max(1, h - 1)));
     tft.drawFastHLine(x + 2, y + i, w - 4, lineColor);
   }
-  drawGlowBorder(x, y, w, h, glow);
+  tft.drawRoundRect(x, y, w, h, 8, blend565(glow, MI_NEGRO, 160));
+  tft.drawRoundRect(x + 1, y + 1, w - 2, h - 2, 8, blend565(glow, MI_NEGRO, 80));
 }
 
 void drawStaticBackground() {
@@ -177,11 +174,11 @@ void drawStaticBackground() {
   drawDarkCard(109, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_AZUL2);
   drawDarkCard(214, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_MORADO);
 
-  drawDarkCard(6, 52, 150, 138, MI_GRIS1, MI_NEGRO, MI_CYAN);
-  drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_NEGRO, MI_AZUL2);
+  drawDarkCard(6, 52, 150, 138, MI_GRIS2, MI_GRIS0, MI_CYAN);
+  drawDarkCard(162, 52, 152, 138, MI_GRIS2, MI_GRIS0, MI_AZUL2);
 
-  drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS1, MI_NEGRO, MI_MORADO);
-  drawDarkCard(BTN_SET_X, BTN_SET_Y, BTN_SET_W, BTN_SET_H, MI_GRIS1, MI_NEGRO, MI_CYAN);
+  drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, MI_MORADO);
+  drawDarkCard(BTN_SET_X, BTN_SET_Y, BTN_SET_W, BTN_SET_H, MI_GRIS2, MI_GRIS0, MI_CYAN);
 
   tft.setTextColor(MI_CYAN);
   tft.setTextSize(1);
@@ -196,23 +193,24 @@ void drawStaticBackground() {
   tft.setCursor(172, 62); tft.print("VPD");
   tft.setCursor(172, 102); tft.print("pH");
   tft.setCursor(172, 142); tft.print("PPM");
-  tft.setCursor(172, 182); tft.print("PRS");
 
-  tft.setTextColor(MI_BLANCO);
+  tft.setTextColor(MI_AZUL2);
   tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print("RIEGO");
+  tft.setTextColor(MI_CYAN);
   tft.setCursor(BTN_SET_X + 10, BTN_SET_Y + 12); tft.print("SET SOIL");
 }
 
-void pushValue(int x, int y, int w, int h, String text, uint16_t color, uint8_t size, uint16_t bgColor) {
+void pushValue(int x, int y, int w, int h, String text, uint16_t color, uint8_t size) {
   if (valueSprite.width() != w || valueSprite.height() != h) {
     valueSprite.deleteSprite();
+    valueSprite.setColorDepth(8);
     valueSprite.createSprite(w, h);
   }
   valueSprite.fillSprite(MI_NEGRO);
   valueSprite.setTextColor(color);
   valueSprite.setTextSize(size);
-  valueSprite.setTextDatum(MC_DATUM);
-  valueSprite.drawString(text, w / 2, h / 2);
+  valueSprite.setTextDatum(TL_DATUM);
+  valueSprite.drawString(text, 0, 0);
   valueSprite.pushSprite(x, y);
 }
 
@@ -232,7 +230,7 @@ void drawSoilBar(int x, int y, int w, int h, float value, float lastValue, const
   tft.setCursor(x + 16, y + h + 2); tft.print(label);
 
   char valStr[8]; sprintf(valStr, "%2.0f%%", value);
-  pushValue(x - 6, y + h + 14, w + 12, 16, String(valStr), MI_BLANCO, 1, MI_NEGRO);
+  pushValue(x - 6, y + h + 14, w + 12, 16, String(valStr), MI_AZUL2, 1);
 }
 
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
@@ -323,7 +321,7 @@ void setup() {
   menuSprite.setColorDepth(16);
   overlaySprite.setColorDepth(16);
   touchBgSprite.setColorDepth(16);
-  valueSprite.setColorDepth(16);
+  valueSprite.setColorDepth(8);
 
   menuSprite.createSprite(140, 110);
   overlaySprite.createSprite(16, 16);
@@ -340,14 +338,13 @@ void loop() {
     menuNeedsRedraw = true;
     if (!inMenu && menuVisible) {
       tft.fillRect(176, 84, 140, 110, MI_NEGRO);
-      drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_NEGRO, MI_AZUL2);
+      drawDarkCard(162, 52, 152, 138, MI_GRIS2, MI_GRIS0, MI_AZUL2);
       tft.setTextColor(MI_CYAN);
       tft.setCursor(172, 62); tft.print("VPD");
       tft.setCursor(172, 102); tft.print("pH");
       tft.setCursor(172, 142); tft.print("PPM");
-      tft.setCursor(172, 182); tft.print("PRS");
       menuVisible = false;
-      lastVpd = lastPh = lastTds = lastPressure = -999;
+      lastVpd = lastPh = lastTds = -999;
     }
   }
   lastButtonState = currentButton;
@@ -356,7 +353,6 @@ void loop() {
   float h = bme.readHumidity();
   if (!isnan(t)) airTemp = t;
   if (!isnan(h)) airHum = h;
-  pressureValue = bme.readPressure() / 100.0F;
 
   soil1 = readSoilPercent(0);
   soil2 = readSoilPercent(1);
@@ -378,17 +374,17 @@ void loop() {
 
   if (remoteSecond != lastSecond) {
     char timeStr[10]; sprintf(timeStr, "%02d:%02d:%02d", remoteHour, remoteMinute, remoteSecond);
-    pushValue(14, 24, 86, 16, String(timeStr), MI_BLANCO, 1, MI_NEGRO);
+    pushValue(14, 24, 86, 16, String(timeStr), MI_CYAN, 1);
     lastSecond = remoteSecond;
   }
   if (fabs(airTemp - lastAirTemp) > 0.09) {
     char valStr[10]; sprintf(valStr, "%2.1fC", airTemp);
-    pushValue(116, 22, 90, 16, String(valStr), MI_AMARILLO, 1, MI_NEGRO);
+    pushValue(116, 22, 90, 16, String(valStr), MI_AMARILLO, 1);
     lastAirTemp = airTemp;
   }
   if (fabs(airHum - lastAirHum) > 0.09) {
     char valStr[10]; sprintf(valStr, "%2.0f%%", airHum);
-    pushValue(222, 22, 90, 16, String(valStr), MI_CYAN, 1, MI_NEGRO);
+    pushValue(222, 22, 90, 16, String(valStr), MI_CYAN, 1);
     lastAirHum = airHum;
   }
 
@@ -398,23 +394,18 @@ void loop() {
 
   if (fabs(vpd - lastVpd) > 0.02) {
     char valStr[10]; sprintf(valStr, "%.2f", vpd);
-    pushValue(168, 78, 140, 18, String(valStr), MI_CYAN, 2, MI_NEGRO);
+    pushValue(168, 78, 140, 18, String(valStr), MI_CYAN, 2);
     lastVpd = vpd;
   }
   if (fabs(phValue - lastPh) > 0.02) {
     char valStr[10]; sprintf(valStr, "%.2f", phValue);
-    pushValue(168, 118, 140, 18, String(valStr), MI_PINK, 2, MI_NEGRO);
+    pushValue(168, 118, 140, 18, String(valStr), MI_PINK, 2);
     lastPh = phValue;
   }
   if (fabs(tdsValue - lastTds) > 3) {
     char valStr[10]; sprintf(valStr, "%.0f", tdsValue);
-    pushValue(168, 158, 140, 18, String(valStr), MI_BLANCO, 2, MI_NEGRO);
+    pushValue(168, 158, 140, 18, String(valStr), MI_MORADO, 2);
     lastTds = tdsValue;
-  }
-  if (fabs(pressureValue - lastPressure) > 0.5) {
-    char valStr[12]; sprintf(valStr, "%.0f", pressureValue);
-    pushValue(168, 198, 140, 18, String(valStr), MI_AZUL2, 2, MI_NEGRO);
-    lastPressure = pressureValue;
   }
 
   greenhouseData.vpd = vpd;
@@ -460,7 +451,7 @@ void loop() {
       menuSprite.fillRoundRect(0, 0, 140, 110, 8, MI_GRIS0);
       menuSprite.drawRoundRect(0, 0, 140, 110, 8, MI_CYAN);
       menuSprite.drawRoundRect(1, 1, 138, 108, 8, MI_AZUL2);
-      menuSprite.setTextColor(MI_BLANCO); menuSprite.setTextSize(1);
+      menuSprite.setTextColor(MI_CYAN); menuSprite.setTextSize(1);
       menuSprite.setCursor(36, 10); menuSprite.print("SET SOIL");
       menuSprite.setTextSize(2);
       menuSprite.setCursor(46, 36); menuSprite.print(soilThreshold, 0); menuSprite.print("%");
@@ -473,14 +464,13 @@ void loop() {
     menuVisible = true;
   } else if (menuVisible) {
     tft.fillRect(176, 84, 140, 110, MI_NEGRO);
-    drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_NEGRO, MI_AZUL2);
+    drawDarkCard(162, 52, 152, 138, MI_GRIS2, MI_GRIS0, MI_AZUL2);
     tft.setTextColor(MI_CYAN);
     tft.setCursor(172, 62); tft.print("VPD");
     tft.setCursor(172, 102); tft.print("pH");
     tft.setCursor(172, 142); tft.print("PPM");
-    tft.setCursor(172, 182); tft.print("PRS");
     menuVisible = false;
-    lastVpd = lastPh = lastTds = lastPressure = -999;
+    lastVpd = lastPh = lastTds = -999;
   }
 
   if (millis() - touchDotTime < 120 && touchDotX >= 0 && touchDotY >= 0) {
