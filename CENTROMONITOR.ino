@@ -65,10 +65,17 @@ typedef struct greenhouse_message {
   bool relayState;
 } greenhouse_message;
 
+typedef struct soil_message {
+  float soil1;
+  float soil2;
+} soil_message;
+
 greenhouse_message greenhouseData;
 uint8_t macFotoperiodo[] = {0x00, 0x4B, 0x12, 0x3D, 0x19, 0xFC};
+uint8_t macSoilNode[] = {0xAC, 0xA7, 0x04, 0xB8, 0x0C, 0xAC};
 
 float airTemp = 0, airHum = 0, soil1 = 0, soil2 = 0, phValue = 0, tdsValue = 0, vpd = 0, pressureValue = 0;
+float remoteSoil1 = 0, remoteSoil2 = 0;
 int remoteLightHours = 0, remoteDarkHours = 0, remoteDaysVeg = 0, remoteDaysFlower = 0;
 bool remoteVegetative = true, remoteLightMode = true;
 float remoteProgress = 0;
@@ -166,39 +173,42 @@ void drawDarkCard(int x, int y, int w, int h, uint16_t top, uint16_t bottom, uin
 void drawStaticBackground() {
   tft.fillScreen(MI_NEGRO);
 
-  drawDarkCard(4, 4, 102, 42, MI_GRIS1, MI_NEGRO, MI_CYAN);
-  drawDarkCard(109, 4, 102, 42, MI_GRIS1, MI_NEGRO, MI_AZUL2);
-  drawDarkCard(214, 4, 102, 42, MI_GRIS1, MI_NEGRO, MI_MORADO);
+  drawDarkCard(4, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_CYAN);
+  drawDarkCard(109, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_AZUL2);
+  drawDarkCard(214, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_MORADO);
 
-  drawDarkCard(6, 52, 150, 138, MI_GRIS2, MI_NEGRO, MI_CYAN);
-  drawDarkCard(162, 52, 152, 138, MI_GRIS2, MI_NEGRO, MI_AZUL2);
+  drawDarkCard(6, 52, 150, 138, MI_GRIS1, MI_NEGRO, MI_CYAN);
+  drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_NEGRO, MI_AZUL2);
 
-  drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_NEGRO, MI_AZUL2);
-  drawDarkCard(BTN_SET_X, BTN_SET_Y, BTN_SET_W, BTN_SET_H, MI_GRIS2, MI_NEGRO, MI_CYAN);
+  drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS1, MI_NEGRO, MI_MORADO);
+  drawDarkCard(BTN_SET_X, BTN_SET_Y, BTN_SET_W, BTN_SET_H, MI_GRIS1, MI_NEGRO, MI_CYAN);
 
-  tft.setTextColor(MI_CYAN, MI_NEGRO);
+  tft.setTextColor(MI_CYAN);
   tft.setTextSize(1);
   tft.setCursor(14, 10); tft.print("HORA");
   tft.setCursor(120, 10); tft.print("TEMP");
   tft.setCursor(226, 10); tft.print("HUM");
 
-  tft.setCursor(18, 58); tft.setTextColor(MI_AZUL2, MI_NEGRO); tft.print("SOIL 1");
+  tft.setCursor(18, 58); tft.setTextColor(MI_AZUL2); tft.print("SOIL 1");
   tft.setCursor(90, 58); tft.print("SOIL 2");
 
-  tft.setTextColor(MI_CYAN, MI_NEGRO);
+  tft.setTextColor(MI_CYAN);
   tft.setCursor(172, 62); tft.print("VPD");
   tft.setCursor(172, 102); tft.print("pH");
   tft.setCursor(172, 142); tft.print("PPM");
   tft.setCursor(172, 182); tft.print("PRS");
 
-  tft.setTextColor(MI_BLANCO, MI_NEGRO);
+  tft.setTextColor(MI_BLANCO);
   tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print("RIEGO");
   tft.setCursor(BTN_SET_X + 10, BTN_SET_Y + 12); tft.print("SET SOIL");
 }
 
 void pushValue(int x, int y, int w, int h, String text, uint16_t color, uint8_t size, uint16_t bgColor) {
-  valueSprite.createSprite(w, h);
-  valueSprite.fillSprite(bgColor);
+  if (valueSprite.width() != w || valueSprite.height() != h) {
+    valueSprite.deleteSprite();
+    valueSprite.createSprite(w, h);
+  }
+  valueSprite.fillSprite(MI_NEGRO);
   valueSprite.setTextColor(color);
   valueSprite.setTextSize(size);
   valueSprite.setTextDatum(MC_DATUM);
@@ -217,7 +227,7 @@ void drawSoilBar(int x, int y, int w, int h, float value, float lastValue, const
   }
   drawGlowBorder(x, y, w, h, MI_CYAN);
 
-  tft.setTextColor(MI_AZUL2, MI_NEGRO);
+  tft.setTextColor(MI_AZUL2);
   tft.setTextSize(1);
   tft.setCursor(x + 16, y + h + 2); tft.print(label);
 
@@ -231,21 +241,40 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
 }
 
 void OnDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len) {
-  if (len != sizeof(struct_message)) return;
-  struct_message incomingMessage;
-  memcpy(&incomingMessage, incomingData, sizeof(incomingMessage));
-  remoteLightHours = incomingMessage.lightHours;
-  remoteDarkHours = incomingMessage.darkHours;
-  remoteDaysVeg = incomingMessage.daysVeg;
-  remoteDaysFlower = incomingMessage.daysFlower;
-  remoteVegetative = incomingMessage.isVegetative;
-  remoteLightMode = incomingMessage.inLightMode;
-  remoteProgress = incomingMessage.progressPercent;
-  remoteHour = incomingMessage.hour;
-  remoteMinute = incomingMessage.minute;
-  remoteSecond = incomingMessage.second;
-  lastEspNowReceiveMs = millis();
-  Serial.println("[ESP-NOW RX OK]");
+  if (len == sizeof(struct_message)) {
+    struct_message incomingMessage;
+    memcpy(&incomingMessage, incomingData, sizeof(incomingMessage));
+    remoteLightHours = incomingMessage.lightHours;
+    remoteDarkHours = incomingMessage.darkHours;
+    remoteDaysVeg = incomingMessage.daysVeg;
+    remoteDaysFlower = incomingMessage.daysFlower;
+    remoteVegetative = incomingMessage.isVegetative;
+    remoteLightMode = incomingMessage.inLightMode;
+    remoteProgress = incomingMessage.progressPercent;
+    remoteHour = incomingMessage.hour;
+    remoteMinute = incomingMessage.minute;
+    remoteSecond = incomingMessage.second;
+    lastEspNowReceiveMs = millis();
+    Serial.println("[ESP-NOW RX struct_message OK]");
+    return;
+  }
+
+  if (len == sizeof(greenhouse_message)) {
+    greenhouse_message incomingGreenhouse;
+    memcpy(&incomingGreenhouse, incomingData, sizeof(incomingGreenhouse));
+    lastEspNowReceiveMs = millis();
+    Serial.println("[ESP-NOW RX greenhouse_message OK]");
+    return;
+  }
+
+  if (len == sizeof(soil_message)) {
+    soil_message incomingSoil;
+    memcpy(&incomingSoil, incomingData, sizeof(incomingSoil));
+    remoteSoil1 = constrain(incomingSoil.soil1, 0.0f, 100.0f);
+    remoteSoil2 = constrain(incomingSoil.soil2, 0.0f, 100.0f);
+    lastEspNowReceiveMs = millis();
+    Serial.println("[ESP-NOW RX soil_message OK]");
+  }
 }
 
 void setup() {
@@ -280,6 +309,12 @@ void setup() {
     peerInfo.channel = WiFi.channel();
     peerInfo.encrypt = false;
     esp_now_add_peer(&peerInfo);
+
+    esp_now_peer_info_t soilPeerInfo = {};
+    memcpy(soilPeerInfo.peer_addr, macSoilNode, 6);
+    soilPeerInfo.channel = WiFi.channel();
+    soilPeerInfo.encrypt = false;
+    esp_now_add_peer(&soilPeerInfo);
   }
 
   digitalWrite(RELAY_PIN, HIGH);
@@ -305,8 +340,8 @@ void loop() {
     menuNeedsRedraw = true;
     if (!inMenu && menuVisible) {
       tft.fillRect(176, 84, 140, 110, MI_NEGRO);
-      drawDarkCard(162, 52, 152, 138, MI_GRIS2, MI_NEGRO, MI_AZUL2);
-      tft.setTextColor(MI_CYAN, MI_NEGRO);
+      drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_NEGRO, MI_AZUL2);
+      tft.setTextColor(MI_CYAN);
       tft.setCursor(172, 62); tft.print("VPD");
       tft.setCursor(172, 102); tft.print("pH");
       tft.setCursor(172, 142); tft.print("PPM");
@@ -357,9 +392,9 @@ void loop() {
     lastAirHum = airHum;
   }
 
-  drawSoilBar(22, 70, 48, 105, soil1, lastSoil1, "S1");
-  drawSoilBar(86, 70, 48, 105, soil2, lastSoil2, "S2");
-  lastSoil1 = soil1; lastSoil2 = soil2;
+  drawSoilBar(22, 70, 48, 105, remoteSoil1, lastSoil1, "S1");
+  drawSoilBar(86, 70, 48, 105, remoteSoil2, lastSoil2, "S2");
+  lastSoil1 = remoteSoil1; lastSoil2 = remoteSoil2;
 
   if (fabs(vpd - lastVpd) > 0.02) {
     char valStr[10]; sprintf(valStr, "%.2f", vpd);
@@ -425,7 +460,7 @@ void loop() {
       menuSprite.fillRoundRect(0, 0, 140, 110, 8, MI_GRIS0);
       menuSprite.drawRoundRect(0, 0, 140, 110, 8, MI_CYAN);
       menuSprite.drawRoundRect(1, 1, 138, 108, 8, MI_AZUL2);
-      menuSprite.setTextColor(MI_BLANCO, MI_NEGRO); menuSprite.setTextSize(1);
+      menuSprite.setTextColor(MI_BLANCO); menuSprite.setTextSize(1);
       menuSprite.setCursor(36, 10); menuSprite.print("SET SOIL");
       menuSprite.setTextSize(2);
       menuSprite.setCursor(46, 36); menuSprite.print(soilThreshold, 0); menuSprite.print("%");
@@ -438,8 +473,8 @@ void loop() {
     menuVisible = true;
   } else if (menuVisible) {
     tft.fillRect(176, 84, 140, 110, MI_NEGRO);
-    drawDarkCard(162, 52, 152, 138, MI_GRIS2, MI_NEGRO, MI_AZUL2);
-    tft.setTextColor(MI_CYAN, MI_NEGRO);
+    drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_NEGRO, MI_AZUL2);
+    tft.setTextColor(MI_CYAN);
     tft.setCursor(172, 62); tft.print("VPD");
     tft.setCursor(172, 102); tft.print("pH");
     tft.setCursor(172, 142); tft.print("PPM");
@@ -448,11 +483,11 @@ void loop() {
     lastVpd = lastPh = lastTds = lastPressure = -999;
   }
 
-  if (millis() - touchDotTime < 200 && touchDotX >= 0 && touchDotY >= 0) {
+  if (millis() - touchDotTime < 120 && touchDotX >= 0 && touchDotY >= 0) {
     touchBgSprite.pushSprite(touchDotX, touchDotY);
     overlaySprite.fillSprite(MI_NEGRO);
-    overlaySprite.fillCircle(8, 8, 3, MI_CYAN);
-    overlaySprite.drawCircle(8, 8, 5, MI_AZUL2);
+    overlaySprite.fillCircle(8, 8, 2, MI_CYAN);
+    overlaySprite.drawCircle(8, 8, 4, MI_AZUL2);
     overlaySprite.pushSprite(touchDotX, touchDotY);
   } else if (touchDotX >= 0 && touchDotY >= 0) {
     touchBgSprite.pushSprite(touchDotX, touchDotY);
