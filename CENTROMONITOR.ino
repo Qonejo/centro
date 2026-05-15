@@ -252,7 +252,7 @@ void setup() {
   Serial.begin(115200);
   Wire.begin(21, 22);
   tft.init();
-  tft.setRotation(3);
+  tft.setRotation(1);
   ts.begin();
   ts.setRotation(4);
   ads.begin();
