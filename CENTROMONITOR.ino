@@ -22,6 +22,8 @@
 #define MI_GRIS2    TFT_BLACK
 #define MI_GRIS3    0x0841
 #define MI_PINK     0xF81F
+#define HUD_TOP     0xDFEC
+#define HUD_BOTTOM  0x88C3
 
 #define TOUCH_CS    14
 
@@ -165,69 +167,81 @@ void drawDarkCard(
   uint16_t glow
 ) {
 
-  // fondo negro profundo
+  for (int i = 0; i < h; i++) {
+
+    uint16_t c = blend565(
+      top,
+      bottom,
+      map(i, 0, h, 40, 180)
+    );
+
+    tft.drawFastHLine(
+      x,
+      y + i,
+      w,
+      c
+    );
+  }
+
   tft.fillRoundRect(
+    x + 2,
+    y + 2,
+    w - 4,
+    h - 4,
+    8,
+    blend565(bottom, TFT_BLACK, 120)
+  );
+
+  drawGlowBorder(
     x,
     y,
     w,
     h,
-    8,
-    TFT_BLACK
-  );
-
-  // sombra interior MUY tenue
-  tft.drawRoundRect(
-    x + 1,
-    y + 1,
-    w - 2,
-    h - 2,
-    8,
-    0x0841
-  );
-
-  // glow exterior tenue
-  tft.drawRoundRect(
-    x,
-    y,
-    w,
-    h,
-    8,
     glow
   );
 }
 
 
 void drawStaticBackground() {
-  tft.fillScreen(TFT_BLACK);
+  for (int y = 0; y < 240; y++) {
 
-  drawDarkCard(4, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_CYAN);
-  drawDarkCard(109, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_AZUL2);
-  drawDarkCard(214, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_MORADO);
+    uint16_t c = blend565(
+        HUD_TOP,
+        HUD_BOTTOM,
+        map(y, 0, 239, 0, 255)
+    );
 
-  drawDarkCard(6, 52, 150, 138, MI_GRIS1, MI_GRIS0, MI_CYAN);
-  drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2);
+    tft.drawFastHLine(0, y, 320, c);
+}
 
-  drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, MI_CYAN);
-  drawDarkCard(BTN_SET_X, BTN_SET_Y, BTN_SET_W, BTN_SET_H, MI_GRIS2, MI_GRIS0, MI_CYAN);
+  drawDarkCard(4, 4, 102, 42, HUD_TOP, HUD_BOTTOM, MI_CYAN);
+  drawDarkCard(109, 4, 102, 42, HUD_TOP, HUD_BOTTOM, MI_CYAN);
+  drawDarkCard(214, 4, 102, 42, HUD_TOP, HUD_BOTTOM, MI_CYAN);
 
-  tft.setTextColor(MI_AZUL2);
+  drawDarkCard(6, 52, 150, 138, HUD_TOP, HUD_BOTTOM, MI_CYAN);
+  drawDarkCard(162, 52, 152, 138, HUD_TOP, HUD_BOTTOM, MI_CYAN);
+
+  drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, HUD_TOP, HUD_BOTTOM, blend565(MI_CYAN, HUD_BOTTOM, 140));
+  drawDarkCard(BTN_SET_X, BTN_SET_Y, BTN_SET_W, BTN_SET_H, HUD_TOP, HUD_BOTTOM, blend565(MI_CYAN, HUD_BOTTOM, 140));
+
+  tft.setTextColor(TFT_BLACK);
   tft.setTextSize(1);
   tft.setCursor(14, 10); tft.print("HORA");
   tft.setCursor(120, 10); tft.print("TEMP");
   tft.setCursor(226, 10); tft.print("HUM");
 
-  tft.setCursor(18, 58); tft.setTextColor(MI_AZUL2); tft.print("SOIL 1");
+  tft.setCursor(18, 58); tft.setTextColor(TFT_BLACK); tft.print("SOIL 1");
   tft.setCursor(90, 58); tft.print("SOIL 2");
 
-  tft.setTextColor(MI_AZUL2);
+  tft.setTextColor(TFT_BLACK);
   tft.setCursor(172, 62); tft.print("VPD");
   tft.setCursor(172, 102); tft.print("pH");
   tft.setCursor(172, 142); tft.print("PPM");
   tft.setCursor(12, 205); tft.print("CO2");
 
-  tft.setTextColor(MI_AZUL2);
+  tft.setTextColor(TFT_BLACK);
   tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print("RIEGO");
-  tft.setTextColor(MI_CYAN);
+  tft.setTextColor(TFT_BLACK);
   tft.setCursor(BTN_SET_X + 10, BTN_SET_Y + 12); tft.print("SET SOIL");
 }
 
@@ -248,7 +262,7 @@ void pushValue(int x, int y, int w, int h, String text, uint16_t color, uint8_t 
 
 void drawSoilBar(int x, int y, int w, int h, float value, float lastValue, const char *label) {
   if (fabs(value - lastValue) < 0.5) return;
-  tft.fillRoundRect(x, y, w, h, 6, MI_NEGRO);
+  tft.fillRoundRect(x, y, w, h, 6, blend565(HUD_BOTTOM, TFT_BLACK, 110));
   int fillH = (int)((h - 8) * (value / 100.0));
   int fy = y + h - 4 - fillH;
   for (int i = 0; i < fillH; i++) {
@@ -257,12 +271,12 @@ void drawSoilBar(int x, int y, int w, int h, float value, float lastValue, const
   }
   drawGlowBorder(x, y, w, h, MI_CYAN);
 
-  tft.setTextColor(MI_AZUL2);
+  tft.setTextColor(TFT_BLACK);
   tft.setTextSize(1);
   tft.setCursor(x + 16, y + h + 2); tft.print(label);
 
   char valStr[8]; sprintf(valStr, "%2.0f%%", value);
-  pushValue(x - 6, y + h + 14, w + 12, 16, String(valStr), MI_AZUL2, 1);
+  pushValue(x - 6, y + h + 14, w + 12, 16, String(valStr), TFT_BLACK, 1);
 }
 
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
@@ -376,8 +390,8 @@ void loop() {
     menuNeedsRedraw = true;
     if (!inMenu && menuVisible) {
       tft.fillRect(176, 84, 140, 110, MI_NEGRO);
-      drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2);
-      tft.setTextColor(MI_AZUL2);
+      drawDarkCard(162, 52, 152, 138, HUD_TOP, HUD_BOTTOM, MI_CYAN);
+      tft.setTextColor(TFT_BLACK);
       tft.setCursor(172, 62); tft.print("VPD");
       tft.setCursor(172, 102); tft.print("pH");
       tft.setCursor(172, 142); tft.print("PPM");
@@ -514,8 +528,8 @@ void loop() {
     menuVisible = true;
   } else if (menuVisible) {
     tft.fillRect(176, 84, 140, 110, MI_NEGRO);
-    drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2);
-      tft.setTextColor(MI_AZUL2);
+    drawDarkCard(162, 52, 152, 138, HUD_TOP, HUD_BOTTOM, MI_CYAN);
+      tft.setTextColor(TFT_BLACK);
       tft.setCursor(172, 62); tft.print("VPD");
       tft.setCursor(172, 102); tft.print("pH");
       tft.setCursor(172, 142); tft.print("PPM");
