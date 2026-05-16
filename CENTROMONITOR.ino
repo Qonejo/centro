@@ -15,12 +15,12 @@
 #define MI_CYAN     0x07FF
 #define MI_ROJO     0xF800
 #define MI_AZUL     0x041F
-#define MI_AZUL2    0x02DF
+#define MI_AZUL2    TFT_CYAN
 #define MI_AMARILLO 0xFFE0
 #define MI_GRIS0    0x0000
-#define MI_GRIS1    0x0000
-#define MI_GRIS2    0x0001
-#define MI_GRIS3    0x0802
+#define MI_GRIS1    TFT_BLACK
+#define MI_GRIS2    TFT_BLACK
+#define MI_GRIS3    0x0841
 #define MI_PINK     0xF81F
 
 #define TOUCH_CS    14
@@ -155,20 +155,50 @@ void drawGlowBorder(int x, int y, int w, int h, uint16_t glowColor) {
   tft.drawRoundRect(x + 2, y + 2, w - 4, h - 4, 7, glowColor);
 }
 
-void drawDarkCard(int x, int y, int w, int h, uint16_t top, uint16_t bottom, uint16_t glow) {
-  uint16_t deepTop = blend565(top, MI_NEGRO, 252);
-  uint16_t deepBottom = blend565(bottom, MI_NEGRO, 254);
-  tft.fillRoundRect(x, y, w, h, 8, MI_NEGRO);
-  for (int i = 2; i < h - 2; i++) {
-    uint16_t lineColor = blend565(deepTop, deepBottom, (uint8_t)((255 * i) / max(1, h - 1)));
-    tft.drawFastHLine(x + 2, y + i, w - 4, lineColor);
-  }
-  tft.drawRoundRect(x, y, w, h, 8, blend565(glow, MI_NEGRO, 252));
-  tft.drawRoundRect(x + 1, y + 1, w - 2, h - 2, 8, blend565(glow, MI_NEGRO, 254));
+void drawDarkCard(
+  int x,
+  int y,
+  int w,
+  int h,
+  uint16_t top,
+  uint16_t bottom,
+  uint16_t glow
+) {
+
+  // fondo negro profundo
+  tft.fillRoundRect(
+    x,
+    y,
+    w,
+    h,
+    8,
+    TFT_BLACK
+  );
+
+  // sombra interior MUY tenue
+  tft.drawRoundRect(
+    x + 1,
+    y + 1,
+    w - 2,
+    h - 2,
+    8,
+    0x0841
+  );
+
+  // glow exterior tenue
+  tft.drawRoundRect(
+    x,
+    y,
+    w,
+    h,
+    8,
+    glow
+  );
 }
 
+
 void drawStaticBackground() {
-  tft.fillScreen(MI_NEGRO);
+  tft.fillScreen(TFT_BLACK);
 
   drawDarkCard(4, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_CYAN);
   drawDarkCard(109, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_AZUL2);
@@ -177,7 +207,7 @@ void drawStaticBackground() {
   drawDarkCard(6, 52, 150, 138, MI_GRIS1, MI_GRIS0, MI_CYAN);
   drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2);
 
-  drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, MI_MORADO);
+  drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, MI_CYAN);
   drawDarkCard(BTN_SET_X, BTN_SET_Y, BTN_SET_W, BTN_SET_H, MI_GRIS2, MI_GRIS0, MI_CYAN);
 
   tft.setTextColor(MI_AZUL2);
