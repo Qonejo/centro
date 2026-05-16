@@ -11,7 +11,6 @@
 #include <esp_now.h>
 
 #define MI_NEGRO    0x0000
-#define MI_BLANCO   0xFFFF
 #define MI_MORADO   0xA01F
 #define MI_CYAN     0x07FF
 #define MI_ROJO     0xF800
@@ -157,15 +156,15 @@ void drawGlowBorder(int x, int y, int w, int h, uint16_t glowColor) {
 }
 
 void drawDarkCard(int x, int y, int w, int h, uint16_t top, uint16_t bottom, uint16_t glow) {
-  uint16_t deepTop = blend565(top, MI_NEGRO, 235);
-  uint16_t deepBottom = blend565(bottom, MI_NEGRO, 248);
+  uint16_t deepTop = blend565(top, MI_NEGRO, 252);
+  uint16_t deepBottom = blend565(bottom, MI_NEGRO, 254);
   tft.fillRoundRect(x, y, w, h, 8, MI_NEGRO);
   for (int i = 2; i < h - 2; i++) {
     uint16_t lineColor = blend565(deepTop, deepBottom, (uint8_t)((255 * i) / max(1, h - 1)));
     tft.drawFastHLine(x + 2, y + i, w - 4, lineColor);
   }
-  tft.drawRoundRect(x, y, w, h, 8, blend565(glow, MI_NEGRO, 238));
-  tft.drawRoundRect(x + 1, y + 1, w - 2, h - 2, 8, blend565(glow, MI_NEGRO, 246));
+  tft.drawRoundRect(x, y, w, h, 8, blend565(glow, MI_NEGRO, 252));
+  tft.drawRoundRect(x + 1, y + 1, w - 2, h - 2, 8, blend565(glow, MI_NEGRO, 254));
 }
 
 void drawStaticBackground() {
@@ -276,13 +275,14 @@ void OnDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, in
     remoteCO2 = max(incomingSoil.co2, 0.0f);
     lastSoil1 = -999;
     lastSoil2 = -999;
+    lastCO2 = -999;
     lastEspNowReceiveMs = millis();
     Serial.println("[ESP-NOW RX soil_message OK]");
     Serial.print("REMOTE S1: ");
     Serial.println(remoteSoil1);
     Serial.print("REMOTE S2: ");
     Serial.println(remoteSoil2);
-    Serial.print("CO2: ");
+    Serial.print("REMOTE CO2: ");
     Serial.println(remoteCO2);
   }
 }
@@ -440,7 +440,7 @@ void loop() {
   int tx = 0, ty = 0;
   if (readTouchScreen(tx, ty)) {
     if (lastTouchX >= 0 && lastTouchY >= 0 && millis() - touchDotTime >= 120) {
-      tft.fillCircle(lastTouchX, lastTouchY, 4, MI_NEGRO);
+      tft.fillRect(lastTouchX - 5, lastTouchY - 5, 10, 10, MI_NEGRO);
       tft.drawPixel(lastTouchX, lastTouchY, MI_CYAN);
       tft.drawPixel(lastTouchX - 1, lastTouchY, MI_AZUL2);
       tft.drawPixel(lastTouchX + 1, lastTouchY, MI_AZUL2);
@@ -495,7 +495,7 @@ void loop() {
   }
 
   if (lastTouchX >= 0 && lastTouchY >= 0 && millis() - touchDotTime >= 120) {
-    tft.fillCircle(lastTouchX, lastTouchY, 4, MI_NEGRO);
+    tft.fillRect(lastTouchX - 5, lastTouchY - 5, 10, 10, MI_NEGRO);
     lastTouchX = -1;
     lastTouchY = -1;
   }
