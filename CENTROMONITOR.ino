@@ -102,6 +102,10 @@ int lastSecond = -1;
 const int BTN_RIEGO_X = 170, BTN_RIEGO_Y = 195, BTN_RIEGO_W = 70, BTN_RIEGO_H = 34;
 const int BTN_SET_X = 246, BTN_SET_Y = 195, BTN_SET_W = 70, BTN_SET_H = 34;
 
+bool isPointInRect(int px, int py, int x, int y, int w, int h) {
+  return px > x && px < (x + w) && py > y && py < (y + h);
+}
+
 float readTDS() {
   long total = 0;
   for (int i = 0; i < 20; i++) total += analogRead(TDS_PIN);
@@ -239,8 +243,21 @@ void drawStaticBackground() {
   tft.setCursor(172, 142); tft.print("PPM");
   tft.setCursor(12, 205); tft.print("CO2");
 
-  tft.setTextColor(TFT_BLACK);
-  tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print("RIEGO");
+}
+
+void drawWaterButton() {
+  uint16_t glow = manualWatering ? blend565(MI_ROJO, HUD_BOTTOM, 100) : blend565(MI_CYAN, HUD_BOTTOM, 140);
+  uint16_t textColor = manualWatering ? MI_ROJO : TFT_BLACK;
+  drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, HUD_TOP, HUD_BOTTOM, glow);
+  tft.setTextSize(1);
+  tft.setTextColor(textColor);
+  tft.setCursor(BTN_RIEGO_X + 15, BTN_RIEGO_Y + 8); tft.print("RIEGO");
+  tft.setCursor(BTN_RIEGO_X + 26, BTN_RIEGO_Y + 20); tft.print(manualWatering ? "ON" : "OFF");
+}
+
+void drawSetSoilButton() {
+  drawDarkCard(BTN_SET_X, BTN_SET_Y, BTN_SET_W, BTN_SET_H, HUD_TOP, HUD_BOTTOM, blend565(MI_CYAN, HUD_BOTTOM, 140));
+  tft.setTextSize(1);
   tft.setTextColor(TFT_BLACK);
   tft.setCursor(BTN_SET_X + 10, BTN_SET_Y + 12); tft.print("SET SOIL");
 }
@@ -274,9 +291,6 @@ void drawSoilBar(int x, int y, int w, int h, float value, float lastValue, const
   tft.setTextColor(TFT_BLACK);
   tft.setTextSize(1);
   tft.setCursor(x + 16, y + h + 2); tft.print(label);
-
-  char valStr[8]; sprintf(valStr, "%2.0f%%", value);
-  pushValue(x - 6, y + h + 14, w + 12, 16, String(valStr), TFT_BLACK, 1);
 }
 
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
@@ -380,6 +394,8 @@ void setup() {
   menuSprite.createSprite(140, 110);
   valueSprite.createSprite(80, 30);
   drawStaticBackground();
+  drawWaterButton();
+  drawSetSoilButton();
 }
 
 void loop() {
@@ -415,7 +431,7 @@ void loop() {
 
   if (manualWatering) {
     digitalWrite(RELAY_PIN, LOW); relayState = true;
-    if (millis() - manualWaterStart >= 10000) manualWatering = false;
+    if (millis() - manualWaterStart >= 30000) manualWatering = false;
   } else if (soil1 < soilThreshold || soil2 < soilThreshold) {
     digitalWrite(RELAY_PIN, LOW); relayState = true;
   } else {
@@ -441,8 +457,8 @@ void loop() {
     lastAirHum = airHum;
   }
 
-  drawSoilBar(22, 70, 48, 105, remoteSoil1, lastSoil1, "S1");
-  drawSoilBar(86, 70, 48, 105, remoteSoil2, lastSoil2, "S2");
+  drawSoilBar(22, 70, 48, 105, remoteSoil1, lastSoil1, "10 cm");
+  drawSoilBar(86, 70, 48, 105, remoteSoil2, lastSoil2, "20 cm");
   lastSoil1 = remoteSoil1; lastSoil2 = remoteSoil2;
 
   if (fabs(vpd - lastVpd) > 0.02) {
@@ -481,26 +497,37 @@ void loop() {
     lastEspNowSendMs = millis();
   }
 
+  static bool lastManualWateringVisual = false;
+  if (lastManualWateringVisual != manualWatering) {
+    drawWaterButton();
+    lastManualWateringVisual = manualWatering;
+  }
+
   int tx = 0, ty = 0;
   if (readTouchScreen(tx, ty)) {
     if (lastTouchX >= 0 && lastTouchY >= 0 && millis() - touchDotTime >= 120) {
       tft.fillRect(lastTouchX - 5, lastTouchY - 5, 10, 10, MI_NEGRO);
-      tft.drawPixel(lastTouchX, lastTouchY, MI_CYAN);
-      tft.drawPixel(lastTouchX - 1, lastTouchY, MI_AZUL2);
-      tft.drawPixel(lastTouchX + 1, lastTouchY, MI_AZUL2);
-      tft.drawPixel(lastTouchX, lastTouchY - 1, MI_AZUL2);
-      tft.drawPixel(lastTouchX, lastTouchY + 1, MI_AZUL2);
+      if (!inMenu && isPointInRect(lastTouchX, lastTouchY, BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H)) drawWaterButton();
+      if (!inMenu && isPointInRect(lastTouchX, lastTouchY, BTN_SET_X, BTN_SET_Y, BTN_SET_W, BTN_SET_H)) drawSetSoilButton();
     }
     lastTouchX = tx;
     lastTouchY = ty;
     touchDotTime = millis();
     tft.fillCircle(tx, ty, 3, MI_CYAN);
 
-    if (!inMenu && tx > BTN_RIEGO_X && tx < BTN_RIEGO_X + BTN_RIEGO_W && ty > BTN_RIEGO_Y && ty < BTN_RIEGO_Y + BTN_RIEGO_H) {
-      manualWatering = true;
-      manualWaterStart = millis();
+    if (!inMenu && isPointInRect(tx, ty, BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H)) {
+      if (!manualWatering) {
+        manualWatering = true;
+        manualWaterStart = millis();
+      } else {
+        manualWatering = false;
+        digitalWrite(RELAY_PIN, HIGH);
+        relayState = false;
+      }
+      drawWaterButton();
+      lastManualWateringVisual = manualWatering;
     }
-    if (!inMenu && tx > BTN_SET_X && tx < BTN_SET_X + BTN_SET_W && ty > BTN_SET_Y && ty < BTN_SET_Y + BTN_SET_H) {
+    if (!inMenu && isPointInRect(tx, ty, BTN_SET_X, BTN_SET_Y, BTN_SET_W, BTN_SET_H)) {
       inMenu = true;
       menuNeedsRedraw = true;
     }
@@ -540,6 +567,8 @@ void loop() {
 
   if (lastTouchX >= 0 && lastTouchY >= 0 && millis() - touchDotTime >= 120) {
     tft.fillRect(lastTouchX - 5, lastTouchY - 5, 10, 10, MI_NEGRO);
+    if (!inMenu && isPointInRect(lastTouchX, lastTouchY, BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H)) drawWaterButton();
+    if (!inMenu && isPointInRect(lastTouchX, lastTouchY, BTN_SET_X, BTN_SET_Y, BTN_SET_W, BTN_SET_H)) drawSetSoilButton();
     lastTouchX = -1;
     lastTouchY = -1;
   }
