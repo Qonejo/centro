@@ -433,21 +433,39 @@ void drawCO2HudCard(float co2, bool forceRedraw = false) {
   tft.fillRoundRect(cardX, cardY, cardW, cardH, 5, bg);
   tft.drawRoundRect(cardX, cardY, cardW, cardH, 5, border);
 
-  char valStr[16];
-  sprintf(valStr, "CO2:%.0fPPM", co2);
+  char numStr[10];
+  sprintf(numStr, "%.0f", co2);
+
   valueSprite.deleteSprite();
   valueSprite.setColorDepth(8);
   valueSprite.createSprite(cardW - 8, cardH - 8);
+
+  // IMPORTANTE:
   valueSprite.fillSprite(bg);
+
   valueSprite.setTextColor(txt, bg);
-  valueSprite.setTextSize(2);
   valueSprite.setTextFont(1);
-  valueSprite.setTextDatum(MC_DATUM);
-  valueSprite.drawString(String(valStr), (cardW - 8) / 2, (cardH - 8) / 2);
+
+  // CO2 pequeño a la izquierda
+  valueSprite.setTextSize(1);
+  valueSprite.setCursor(2, 10);
+  valueSprite.print("CO2");
+
+  // número grande
+  valueSprite.setTextSize(2);
+  valueSprite.setCursor(30, 4);
+  valueSprite.print(numStr);
+
+  // PPM pequeño
+  valueSprite.setTextSize(1);
+  valueSprite.setCursor(86, 10);
+  valueSprite.print("PPM");
+
+  // IMPORTANTE
   valueSprite.pushSprite(cardX + 4, cardY + 4);
 
   lastCO2 = co2;
-}
+  }
 
 void redrawTouchArea(int x, int y) {
   if (x >= 6 && x <= 156 && y >= 52 && y <= 190) {
