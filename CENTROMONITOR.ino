@@ -238,7 +238,7 @@ void drawStaticBackground() {
   drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, MI_CYAN, MI_AMARILLO);
   drawDarkCard(BTN_SET_X, BTN_SET_Y, BTN_SET_W, BTN_SET_H, MI_GRIS2, MI_GRIS0, MI_CYAN, MI_AMARILLO);
 
-  tft.setTextColor(MI_AZUL2);
+  tft.setTextColor(MI_BLANCO);
   tft.setTextSize(1);
   tft.setCursor(14, 10); tft.print("HORA");
   tft.setTextColor(MI_ROJO_CLARO);
@@ -246,18 +246,18 @@ void drawStaticBackground() {
   tft.setTextColor(MI_CYAN);
   tft.setCursor(226, 10); tft.print("HUM");
 
-  tft.setCursor(18, 58); tft.setTextColor(MI_AZUL2); tft.print("10 CM");
+  tft.setCursor(18, 58); tft.setTextColor(MI_BLANCO); tft.print("10 CM");
   tft.setCursor(90, 58); tft.print("20 CM");
 
-  tft.setTextColor(MI_AZUL2);
+  tft.setTextColor(MI_BLANCO);
   tft.setCursor(172, 62); tft.print("VPD");
   tft.setCursor(172, 142); tft.print("PPM/EC");
-  tft.setTextColor(MI_CYAN);
+  tft.setTextColor(MI_BLANCO);
   tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print("OFF");
 
   drawPHScaleStatic();
 
-  tft.setTextColor(MI_CYAN);
+  tft.setTextColor(MI_BLANCO);
   tft.setCursor(BTN_SET_X + 10, BTN_SET_Y + 12); tft.print("SET SOIL");
 }
 
@@ -441,7 +441,7 @@ void drawCO2HudCard(float co2, bool forceRedraw = false) {
 void redrawTouchArea(int x, int y) {
   if (x >= 6 && x <= 156 && y >= 52 && y <= 190) {
     drawDarkCard(6, 52, 150, 138, MI_GRIS1, MI_GRIS0, MI_CYAN, MI_AMARILLO);
-    tft.setTextColor(MI_AZUL2);
+    tft.setTextColor(MI_BLANCO);
     tft.setTextSize(1);
     tft.setCursor(18, 58); tft.print("10 CM");
     tft.setCursor(90, 58); tft.print("20 CM");
@@ -449,7 +449,7 @@ void redrawTouchArea(int x, int y) {
     drawSoilBar(86, 70, 48, 105, remoteSoil2, -999, "");
   } else if (x >= 162 && x <= 314 && y >= 52 && y <= 190) {
     drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2, MI_AMARILLO);
-    tft.setTextColor(MI_AZUL2);
+    tft.setTextColor(MI_BLANCO);
     tft.setCursor(172, 62); tft.print("VPD");
     tft.setCursor(172, 142); tft.print("PPM/EC");
     drawPHScaleStatic();
@@ -467,7 +467,7 @@ void redrawTouchArea(int x, int y) {
     tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print(manualWatering ? "ON " : "OFF");
   } else if (x >= BTN_SET_X && x <= BTN_SET_X + BTN_SET_W && y >= BTN_SET_Y && y <= BTN_SET_Y + BTN_SET_H) {
     drawDarkCard(BTN_SET_X, BTN_SET_Y, BTN_SET_W, BTN_SET_H, MI_GRIS2, MI_GRIS0, MI_CYAN, MI_AMARILLO);
-    tft.setTextColor(MI_CYAN);
+    tft.setTextColor(MI_BLANCO);
     tft.setCursor(BTN_SET_X + 10, BTN_SET_Y + 12); tft.print("SET SOIL");
   } else {
     tft.fillRect(max(0, x - 3), max(0, y - 3), 7, 7, MI_NEGRO);
@@ -589,7 +589,7 @@ void loop() {
     if (!inMenu && menuVisible) {
       tft.fillRect(176, 84, 140, 110, MI_NEGRO);
       drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2, MI_AMARILLO);
-      tft.setTextColor(MI_AZUL2);
+      tft.setTextColor(MI_BLANCO);
       tft.setCursor(172, 62); tft.print("VPD");
       tft.setCursor(172, 142); tft.print("PPM/EC");
       drawPHScaleStatic();
@@ -630,7 +630,7 @@ void loop() {
   }
   if (fabs(airTemp - lastAirTemp) > 0.09) {
     char valStr[10]; sprintf(valStr, "%2.1fC", airTemp);
-    pushValue(116, 22, 90, 16, String(valStr), MI_ROJO_CLARO, 1);
+    pushValue(116, 22, 90, 16, String(valStr), MI_ROJO, 1);
     lastAirTemp = airTemp;
   }
   if (fabs(airHum - lastAirHum) > 0.09) {
@@ -703,7 +703,7 @@ void loop() {
       menuSprite.fillRoundRect(0, 0, 140, 110, 8, MI_GRIS0);
       menuSprite.drawRoundRect(0, 0, 140, 110, 8, MI_CYAN);
       menuSprite.drawRoundRect(1, 1, 138, 108, 8, MI_AZUL2);
-      menuSprite.setTextColor(MI_CYAN); menuSprite.setTextSize(1);
+      menuSprite.setTextColor(MI_BLANCO); menuSprite.setTextSize(1);
       menuSprite.setCursor(36, 10); menuSprite.print("SET SOIL");
       menuSprite.setTextSize(2);
       menuSprite.setCursor(46, 36); menuSprite.print(soilThreshold, 0); menuSprite.print("%");
@@ -717,7 +717,7 @@ void loop() {
   } else if (menuVisible) {
     tft.fillRect(176, 84, 140, 110, MI_NEGRO);
     drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2, MI_AMARILLO);
-    tft.setTextColor(MI_AZUL2);
+    tft.setTextColor(MI_BLANCO);
     tft.setCursor(172, 62); tft.print("VPD");
     tft.setCursor(172, 142); tft.print("PPM/EC");
     drawPHScaleStatic();
