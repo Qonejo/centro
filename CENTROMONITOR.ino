@@ -110,7 +110,7 @@ int lastSecond = -1;
 
 const int BTN_RIEGO_X = 170, BTN_RIEGO_Y = 195, BTN_RIEGO_W = 70, BTN_RIEGO_H = 34;
 const int BTN_SET_X = 246, BTN_SET_Y = 195, BTN_SET_W = 70, BTN_SET_H = 34;
-const int PH_SCALE_X = 282, PH_SCALE_Y = 72, PH_SCALE_W = 26, PH_BAR_H = 108, PH_BAR_X = PH_SCALE_X + 12, PH_BAR_W = 6;
+const int PH_SCALE_X = 276, PH_SCALE_Y = 72, PH_SCALE_W = 26, PH_BAR_H = 108, PH_BAR_X = PH_SCALE_X + 12, PH_BAR_W = 6;
 void redrawTouchArea(int x, int y);
 
 void saveSoilThreshold() {
@@ -271,8 +271,13 @@ void pushValue(int x, int y, int w, int h, String text, uint16_t color, uint8_t 
   valueSprite.setTextColor(color);
   valueSprite.setTextSize(size);
   valueSprite.setTextDatum(datum);
-  int drawX = (datum == TR_DATUM || datum == MR_DATUM || datum == BR_DATUM) ? (w - 1) : 0;
-  valueSprite.drawString(text, drawX, 0);
+  int drawX = 0;
+  int drawY = 0;
+  if (datum == TC_DATUM || datum == MC_DATUM || datum == BC_DATUM) drawX = w / 2;
+  else if (datum == TR_DATUM || datum == MR_DATUM || datum == BR_DATUM) drawX = w - 1;
+  if (datum == ML_DATUM || datum == MC_DATUM || datum == MR_DATUM) drawY = h / 2;
+  else if (datum == BL_DATUM || datum == BC_DATUM || datum == BR_DATUM) drawY = h - 1;
+  valueSprite.drawString(text, drawX, drawY);
   valueSprite.pushSprite(x, y);
 }
 
@@ -349,7 +354,7 @@ void redrawPHScaleBand(int centerY) {
 }
 
 void redrawPHValueArea() {
-  const int textX = 248;
+  const int textX = 242;
   const int textY = PH_SCALE_Y;
   const int textW = 34;
   const int textH = PH_BAR_H;
@@ -357,7 +362,7 @@ void redrawPHValueArea() {
 }
 
 void drawPHIndicator(float ph) {
-  const int areaX = 248;
+  const int areaX = 242;
   const int areaY = PH_SCALE_Y;
   const int areaW = 34;
   const int areaH = PH_BAR_H;
@@ -380,7 +385,7 @@ void drawPHIndicator(float ph) {
   tft.setTextSize(1);
   tft.setTextFont(2);
   int textY = constrain(y - 6, areaY + 1, areaY + areaH - 14);
-  tft.setCursor(areaX + 1, textY);
+  tft.setCursor(areaX + 4, textY);
   tft.print(ph, 1);
 
   lastPhIndicatorY = y;
@@ -455,9 +460,9 @@ void redrawTouchArea(int x, int y) {
     drawPHScaleStatic();
     drawPHIndicator(phValue);
     char vpdStr[10]; sprintf(vpdStr, "%.2f", vpd);
-    pushValue(168, 78, 100, 18, String(vpdStr), getVPDColor(vpd), 2);
+    pushValue(166, 82, 100, 18, String(vpdStr), getVPDColor(vpd), 2, MC_DATUM);
     char tdsStr[10]; sprintf(tdsStr, "%.0f", tdsValue);
-    pushValue(168, 158, 140, 18, String(tdsStr), MI_MORADO, 2);
+    pushValue(166, 162, 140, 18, String(tdsStr), MI_MORADO, 2, MC_DATUM);
   } else if (x >= 10 && x <= 108 && y >= 217 && y <= 237) {
     drawCO2HudCard(remoteCO2, true);
   } else if (x >= BTN_RIEGO_X && x <= BTN_RIEGO_X + BTN_RIEGO_W && y >= BTN_RIEGO_Y && y <= BTN_RIEGO_Y + BTN_RIEGO_H) {
@@ -630,12 +635,12 @@ void loop() {
   }
   if (fabs(airTemp - lastAirTemp) > 0.09) {
     char valStr[10]; sprintf(valStr, "%2.1fC", airTemp);
-    pushValue(116, 22, 90, 16, String(valStr), MI_ROJO, 1);
+    pushValue(114, 24, 90, 16, String(valStr), MI_ROJO, 1, MC_DATUM);
     lastAirTemp = airTemp;
   }
   if (fabs(airHum - lastAirHum) > 0.09) {
     char valStr[10]; sprintf(valStr, "%2.0f%%", airHum);
-    pushValue(222, 22, 90, 16, String(valStr), MI_CYAN, 1);
+    pushValue(220, 24, 90, 16, String(valStr), MI_CYAN, 1, MC_DATUM);
     lastAirHum = airHum;
   }
 
@@ -645,14 +650,14 @@ void loop() {
 
   if (fabs(vpd - lastVpd) > 0.02) {
     char valStr[10]; sprintf(valStr, "%.2f", vpd);
-    pushValue(168, 78, 100, 18, String(valStr), getVPDColor(vpd), 2);
+    pushValue(166, 82, 100, 18, String(valStr), getVPDColor(vpd), 2, MC_DATUM);
     lastVpd = vpd;
   }
   drawPHIndicator(phValue);
   if (fabs(phValue - lastPh) > 0.02) lastPh = phValue;
   if (fabs(tdsValue - lastTds) > 3) {
     char valStr[10]; sprintf(valStr, "%.0f", tdsValue);
-    pushValue(168, 158, 140, 18, String(valStr), MI_MORADO, 2);
+    pushValue(166, 162, 140, 18, String(valStr), MI_MORADO, 2, MC_DATUM);
     lastTds = tdsValue;
   }
 
