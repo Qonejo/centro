@@ -201,6 +201,16 @@ void drawDarkCard(
     0x0841
   );
 
+  // detalle interno del color del card
+  tft.drawRoundRect(
+    x + 2,
+    y + 2,
+    w - 4,
+    h - 4,
+    7,
+    blend565(glow, MI_NEGRO, 110)
+  );
+
   // glow exterior tenue
   tft.drawRoundRect(
     x,
@@ -336,6 +346,14 @@ void redrawPHScaleBand(int centerY) {
   }
 }
 
+void redrawPHValueArea() {
+  const int textX = 248;
+  const int textY = PH_SCALE_Y;
+  const int textW = 34;
+  const int textH = PH_BAR_H;
+  tft.fillRect(textX, textY, textW, textH, MI_NEGRO);
+}
+
 void drawPHIndicator(float ph) {
   const int areaX = 248;
   const int areaY = PH_SCALE_Y;
@@ -349,14 +367,18 @@ void drawPHIndicator(float ph) {
   if (lastPhIndicatorY >= PH_SCALE_Y && lastPhIndicatorY < (PH_SCALE_Y + PH_BAR_H)) {
     redrawPHScaleBand(lastPhIndicatorY);
   }
-  tft.fillRect(areaX, areaY, areaW, areaH, MI_NEGRO);
+
   redrawPHScaleBand(y);
+  redrawPHValueArea();
+
   uint16_t c = getPHScaleColor(ph);
   tft.fillCircle(dotX, y, 2, MI_ROJO_CLARO);
+  tft.drawPixel(dotX, y, MI_ROJO);
   tft.setTextColor(c, MI_NEGRO);
   tft.setTextSize(1);
   tft.setTextFont(2);
-  tft.setCursor(areaX + 2, y - 2);
+  int textY = constrain(y - 6, areaY + 1, areaY + areaH - 14);
+  tft.setCursor(areaX + 1, textY);
   tft.print(ph, 1);
 
   lastPhIndicatorY = y;
