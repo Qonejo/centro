@@ -309,9 +309,9 @@ uint16_t getVPDColor(float vpd) {
 }
 
 int phToY(float ph) {
-  float clamped = constrain(ph, 2.0f, 12.0f);
-  float ratio = (clamped - 2.0f) / 10.0f;
-  return PH_SCALE_Y + PH_BAR_H - 1 - (int)((PH_BAR_H - 1) * ratio);
+  float clamped = constrain(ph, 3.0f, 11.0f);
+  float ratio = (11.0f - clamped) / 8.0f;
+  return PH_SCALE_Y + (int)((PH_BAR_H - 1) * ratio);
 }
 
 uint16_t getPHScaleColor(float p) {
@@ -325,7 +325,7 @@ uint16_t getPHScaleColor(float p) {
 void drawPHScaleStatic() {
   tft.fillRect(PH_SCALE_X, PH_SCALE_Y, PH_SCALE_W, PH_BAR_H, MI_NEGRO);
 
-  for (int p = 2; p <= 12; p++) {
+  for (int p = 11; p >= 3; p--) {
     int y = phToY((float)p);
     uint16_t c = getPHScaleColor((float)p);
     tft.drawFastHLine(PH_BAR_X - 2, y, PH_BAR_W + 4, blend565(c, MI_NEGRO, 100));
@@ -346,7 +346,7 @@ void redrawPHScaleBand(int centerY) {
   int yEnd = min(PH_SCALE_Y + PH_BAR_H - 1, centerY + 4);
   for (int y = yStart; y <= yEnd; y++) {
     float ratio = (float)(PH_SCALE_Y + PH_BAR_H - 1 - y) / (float)(PH_BAR_H - 1);
-    float p = 2.0f + (ratio * 10.0f);
+    float p = 11.0f - (ratio * 8.0f);
     uint16_t c = getPHScaleColor(p);
     tft.drawFastHLine(PH_BAR_X - 2, y, PH_BAR_W + 4, blend565(c, MI_NEGRO, 100));
     tft.drawFastHLine(PH_BAR_X - 1, y, PH_BAR_W + 2, c);
@@ -354,18 +354,16 @@ void redrawPHScaleBand(int centerY) {
 }
 
 void redrawPHValueArea() {
-  const int textX = 242;
-  const int textY = PH_SCALE_Y;
-  const int textW = 34;
-  const int textH = PH_BAR_H;
-  tft.fillRect(textX, textY, textW, textH, MI_NEGRO);
+  const int phValueX = PH_SCALE_X - 2;
+  const int phValueY = PH_SCALE_Y + PH_BAR_H + 10;
+  const int textW = 30;
+  const int textH = 12;
+  tft.fillRect(phValueX, phValueY, textW, textH, MI_NEGRO);
 }
 
 void drawPHIndicator(float ph) {
-  const int areaX = 242;
-  const int areaY = PH_SCALE_Y;
-  const int areaW = 34;
-  const int areaH = PH_BAR_H;
+  const int phValueX = PH_SCALE_X - 2;
+  const int phValueY = PH_SCALE_Y + PH_BAR_H + 10;
   const int dotX = PH_BAR_X + (PH_BAR_W / 2);
   int y = phToY(ph);
 
@@ -384,8 +382,7 @@ void drawPHIndicator(float ph) {
   tft.setTextColor(c, MI_NEGRO);
   tft.setTextSize(1);
   tft.setTextFont(2);
-  int textY = constrain(y - 6, areaY + 1, areaY + areaH - 14);
-  tft.setCursor(areaX + 4, textY);
+  tft.setCursor(phValueX, phValueY);
   tft.print(ph, 1);
 
   lastPhIndicatorY = y;
