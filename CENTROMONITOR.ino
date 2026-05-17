@@ -12,6 +12,7 @@
 #include <Preferences.h>
 
 #define MI_NEGRO    0x0000
+#define MI_BLANCO   0xFFFF
 #define MI_MORADO   0xA01F
 #define MI_CYAN     0xFFE0
 #define MI_ROJO     0x001F
@@ -19,8 +20,8 @@
 #define MI_AZUL2    0xF800
 #define MI_AMARILLO 0x07FF
 #define MI_GRIS0    0x0000
-#define MI_GRIS1    TFT_BLACK
-#define MI_GRIS2    TFT_BLACK
+#define MI_GRIS1    MI_NEGRO
+#define MI_GRIS2    MI_NEGRO
 #define MI_GRIS3    0x0841
 #define MI_PINK     0xF81F
 #define MI_ROJO_OSCURO 0x8000
@@ -188,7 +189,7 @@ void drawDarkCard(
     w,
     h,
     8,
-    TFT_BLACK
+    MI_NEGRO
   );
 
   // sombra interior MUY tenue
@@ -224,7 +225,7 @@ void drawDarkCard(
 
 
 void drawStaticBackground() {
-  tft.fillScreen(TFT_BLACK);
+  tft.fillScreen(MI_NEGRO);
 
   drawDarkCard(4, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_CYAN);
   drawDarkCard(109, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_ROJO);
@@ -407,14 +408,14 @@ void drawCO2HudCard(float co2, bool forceRedraw = false) {
 
   if (!forceRedraw && fabs(co2 - lastCO2) <= 0.5f) return;
 
-  uint16_t bg = TFT_WHITE;
+  uint16_t bg = MI_BLANCO;
   uint16_t border = 0x7DFF;
-  uint16_t txt = TFT_BLACK;
+  uint16_t txt = MI_NEGRO;
 
   if (danger && lastCO2BlinkOn) {
     bg = MI_ROJO;
     border = MI_ROJO_CLARO;
-    txt = TFT_WHITE;
+    txt = MI_BLANCO;
   }
 
   tft.fillRoundRect(cardX, cardY, cardW, cardH, 5, bg);
