@@ -218,7 +218,7 @@ void drawStaticBackground() {
 
   drawDarkCard(4, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_CYAN);
   drawDarkCard(109, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_ROJO);
-  drawDarkCard(214, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_AZUL2);
+  drawDarkCard(214, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_CYAN);
 
   drawDarkCard(6, 52, 150, 138, MI_GRIS1, MI_GRIS0, MI_CYAN);
   drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2);
@@ -231,7 +231,7 @@ void drawStaticBackground() {
   tft.setCursor(14, 10); tft.print("HORA");
   tft.setTextColor(MI_ROJO_CLARO);
   tft.setCursor(120, 10); tft.print("TEMP");
-  tft.setTextColor(MI_AZUL2);
+  tft.setTextColor(MI_CYAN);
   tft.setCursor(226, 10); tft.print("HUM");
 
   tft.setCursor(18, 58); tft.setTextColor(MI_AZUL2); tft.print("10 CM");
@@ -324,21 +324,38 @@ void drawPHScaleStatic() {
   tft.drawRoundRect(PH_BAR_X - 1, PH_SCALE_Y - 1, PH_BAR_W + 2, PH_BAR_H + 2, 2, MI_AZUL2);
 }
 
+void redrawPHScaleBand(int centerY) {
+  int yStart = max(PH_SCALE_Y, centerY - 4);
+  int yEnd = min(PH_SCALE_Y + PH_BAR_H - 1, centerY + 4);
+  for (int y = yStart; y <= yEnd; y++) {
+    float ratio = (float)(PH_SCALE_Y + PH_BAR_H - 1 - y) / (float)(PH_BAR_H - 1);
+    float p = 2.0f + (ratio * 10.0f);
+    uint16_t c = getPHScaleColor(p);
+    tft.drawFastHLine(PH_BAR_X - 2, y, PH_BAR_W + 4, blend565(c, MI_NEGRO, 100));
+    tft.drawFastHLine(PH_BAR_X - 1, y, PH_BAR_W + 2, c);
+  }
+}
+
 void drawPHIndicator(float ph) {
   const int areaX = 248;
   const int areaY = PH_SCALE_Y;
-  const int areaW = 32;
+  const int areaW = 34;
   const int areaH = PH_BAR_H;
+  const int dotX = PH_BAR_X + (PH_BAR_W / 2);
   int y = phToY(ph);
 
-  if (fabs(ph - lastPhIndicatorValue) < 0.01f && abs(y - lastPhIndicatorY) <= 0) return;
+  if (fabs(ph - lastPhIndicatorValue) < 0.01f && y == lastPhIndicatorY) return;
 
+  if (lastPhIndicatorY >= PH_SCALE_Y && lastPhIndicatorY < (PH_SCALE_Y + PH_BAR_H)) {
+    redrawPHScaleBand(lastPhIndicatorY);
+  }
   tft.fillRect(areaX, areaY, areaW, areaH, MI_NEGRO);
+  redrawPHScaleBand(y);
   uint16_t c = getPHScaleColor(ph);
+  tft.fillCircle(dotX, y, 2, MI_ROJO_CLARO);
   tft.setTextColor(c, MI_NEGRO);
   tft.setTextSize(1);
-  tft.setTextFont(1);
-  tft.fillCircle(PH_BAR_X + (PH_BAR_W / 2), y, 2, MI_ROJO_CLARO);
+  tft.setTextFont(2);
   tft.setCursor(areaX + 2, y - 2);
   tft.print(ph, 1);
 
@@ -382,7 +399,7 @@ void drawCO2HudCard(float co2, bool forceRedraw = false) {
   tft.drawRoundRect(cardX, cardY, cardW, cardH, 5, border);
 
   char valStr[16];
-  sprintf(valStr, "%.0f ppm", co2);
+  sprintf(valStr, "CO2: %.0f PPM", co2);
   valueSprite.deleteSprite();
   valueSprite.setColorDepth(8);
   valueSprite.createSprite(cardW - 8, cardH - 6);
@@ -589,7 +606,7 @@ void loop() {
   }
   if (fabs(airTemp - lastAirTemp) > 0.09) {
     char valStr[10]; sprintf(valStr, "%2.1fC", airTemp);
-    pushValue(116, 22, 90, 16, String(valStr), MI_ROJO, 1);
+    pushValue(116, 22, 90, 16, String(valStr), MI_ROJO_CLARO, 1);
     lastAirTemp = airTemp;
   }
   if (fabs(airHum - lastAirHum) > 0.09) {
