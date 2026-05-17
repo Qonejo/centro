@@ -33,6 +33,7 @@
 
 #define RELAY_PIN       25
 #define HUMIDIFIER_PIN  26
+#define WATER_PUMP_PIN  17
 #define TDS_PIN         34
 #define MENU_BUTTON_PIN 33
 
@@ -95,6 +96,8 @@ float calibrationFactorTDS = 1.22;
 bool relayState = false, humidifierState = false, inMenu = false, lastButtonState = false;
 bool espNowLastSendOk = false;
 bool manualWatering = false;
+bool waterPumpState = false;
+bool manualPump = false;
 int lastTouchX = -1, lastTouchY = -1;
 unsigned long lastMenuDebounceMs = 0;
 unsigned long lastHeapLogMs = 0;
@@ -109,11 +112,14 @@ bool co2CardNeedsFullRedraw = true;
 int lastSecond = -1;
 
 const int BTN_RIEGO_X = 170, BTN_RIEGO_Y = 195, BTN_RIEGO_W = 70, BTN_RIEGO_H = 34;
-const int BTN_SET_X = 246, BTN_SET_Y = 195, BTN_SET_W = 70, BTN_SET_H = 34;
+const int BTN_PUMP_X = 246, BTN_PUMP_Y = 195, BTN_PUMP_W = 70, BTN_PUMP_H = 34;
+const int BTN_SET_X = 322, BTN_SET_Y = 195, BTN_SET_W = 70, BTN_SET_H = 34;
 const int PH_SCALE_X = 276, PH_SCALE_Y = 72, PH_SCALE_W = 26, PH_BAR_H = 93, PH_BAR_X = PH_SCALE_X + 12, PH_BAR_W = 6;
 const int SOIL_BAR_Y = 70, SOIL_BAR_W = 48, SOIL_BAR_H = 105;
 const int SOIL1_BAR_X = 22, SOIL2_BAR_X = 86;
 void redrawTouchArea(int x, int y);
+void drawPumpButton();
+void drawHumIndicator();
 
 void saveSoilThreshold() {
   preferences.putFloat("soilTh", soilThreshold);
@@ -238,6 +244,7 @@ void drawStaticBackground() {
   drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2, MI_AMARILLO);
 
   drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, MI_CYAN, MI_AMARILLO);
+  drawDarkCard(BTN_PUMP_X, BTN_PUMP_Y, BTN_PUMP_W, BTN_PUMP_H, MI_GRIS2, MI_GRIS0, MI_CYAN, MI_AMARILLO);
   drawDarkCard(BTN_SET_X, BTN_SET_Y, BTN_SET_W, BTN_SET_H, MI_GRIS2, MI_GRIS0, MI_CYAN, MI_AMARILLO);
 
   tft.setTextColor(MI_BLANCO);
@@ -247,6 +254,7 @@ void drawStaticBackground() {
   tft.setCursor(120, 10); tft.print("TEMP");
   tft.setTextColor(MI_CYAN);
   tft.setCursor(226, 10); tft.print("HUM");
+  drawHumIndicator();
 
   tft.setTextColor(MI_BLANCO);
   tft.setTextSize(1);
@@ -260,6 +268,8 @@ void drawStaticBackground() {
   tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print("OFF");
 
   drawPHScaleStatic();
+
+  drawPumpButton();
 
   tft.setTextColor(MI_BLANCO);
   tft.setCursor(BTN_SET_X + 10, BTN_SET_Y + 12); tft.print("SET SOIL");
@@ -467,6 +477,23 @@ void drawCO2HudCard(float co2, bool forceRedraw = false) {
   lastCO2 = co2;
   }
 
+
+void drawPumpButton() {
+  drawDarkCard(BTN_PUMP_X, BTN_PUMP_Y, BTN_PUMP_W, BTN_PUMP_H, MI_GRIS2, MI_GRIS0, manualPump ? MI_ROJO : MI_CYAN, MI_AMARILLO);
+  tft.setTextColor(manualPump ? MI_ROJO_CLARO : MI_BLANCO);
+  tft.setTextSize(1);
+  tft.setCursor(BTN_PUMP_X + 16, BTN_PUMP_Y + 12);
+  tft.print("PUMP");
+}
+
+void drawHumIndicator() {
+  const int humDotX = 262;
+  const int humDotY = 13;
+  const int humDotR = 4;
+  tft.fillCircle(humDotX, humDotY, humDotR, humidifierState ? MI_ROJO : MI_GRIS3);
+  tft.drawCircle(humDotX, humDotY, humDotR, blend565(MI_ROJO, MI_NEGRO, 120));
+}
+
 void redrawTouchArea(int x, int y) {
   if (x >= 6 && x <= 156 && y >= 52 && y <= 190) {
     drawDarkCard(6, 52, 150, 138, MI_GRIS1, MI_GRIS0, MI_CYAN, MI_AMARILLO);
@@ -494,6 +521,8 @@ void redrawTouchArea(int x, int y) {
     tft.setTextColor(manualWatering ? MI_ROJO_CLARO : MI_CYAN);
     tft.setTextSize(1);
     tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print(manualWatering ? "ON " : "OFF");
+  } else if (x >= BTN_PUMP_X && x <= BTN_PUMP_X + BTN_PUMP_W && y >= BTN_PUMP_Y && y <= BTN_PUMP_Y + BTN_PUMP_H) {
+    drawPumpButton();
   } else if (x >= BTN_SET_X && x <= BTN_SET_X + BTN_SET_W && y >= BTN_SET_Y && y <= BTN_SET_Y + BTN_SET_H) {
     drawDarkCard(BTN_SET_X, BTN_SET_Y, BTN_SET_W, BTN_SET_H, MI_GRIS2, MI_GRIS0, MI_CYAN, MI_AMARILLO);
     tft.setTextColor(MI_BLANCO);
@@ -576,6 +605,7 @@ void setup() {
   }
   pinMode(RELAY_PIN, OUTPUT);
   pinMode(HUMIDIFIER_PIN, OUTPUT);
+  pinMode(WATER_PUMP_PIN, OUTPUT);
   pinMode(MENU_BUTTON_PIN, INPUT);
   preferences.begin("centro", false);
   soilThreshold = preferences.getFloat("soilTh", 40.0f);
@@ -599,6 +629,7 @@ void setup() {
 
   digitalWrite(RELAY_PIN, HIGH);
   digitalWrite(HUMIDIFIER_PIN, LOW);
+  digitalWrite(WATER_PUMP_PIN, HIGH);
 
   menuSprite.setColorDepth(16);
   valueSprite.setColorDepth(8);
@@ -649,6 +680,14 @@ void loop() {
     digitalWrite(RELAY_PIN, HIGH); relayState = false;
   }
 
+  if (manualPump) {
+    digitalWrite(WATER_PUMP_PIN, LOW);
+    waterPumpState = true;
+  } else {
+    digitalWrite(WATER_PUMP_PIN, HIGH);
+    waterPumpState = false;
+  }
+
   String currentStage;
   float targetVPDMin = 0.81f;
   float targetVPDMax = 1.19f;
@@ -680,12 +719,16 @@ void loop() {
     }
   }
 
+  bool prevHumidifierState = humidifierState;
   if (vpd > targetVPDMax) {
     digitalWrite(HUMIDIFIER_PIN, HIGH);
     humidifierState = true;
   } else if (vpd <= (targetVPDMax - vpdHysteresis)) {
     digitalWrite(HUMIDIFIER_PIN, LOW);
     humidifierState = false;
+  }
+  if (humidifierState != prevHumidifierState) {
+    drawHumIndicator();
   }
 
   Serial.print("ETAPA: ");
@@ -763,6 +806,15 @@ void loop() {
       tft.setTextColor(manualWatering ? MI_ROJO_CLARO : MI_CYAN);
       tft.setTextSize(1);
       tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print(manualWatering ? "ON " : "OFF");
+    }
+    if (!inMenu &&
+      tx > BTN_PUMP_X &&
+      tx < BTN_PUMP_X + BTN_PUMP_W &&
+      ty > BTN_PUMP_Y &&
+      ty < BTN_PUMP_Y + BTN_PUMP_H
+    ) {
+      manualPump = !manualPump;
+      drawPumpButton();
     }
     if (!inMenu && tx > BTN_SET_X && tx < BTN_SET_X + BTN_SET_W && ty > BTN_SET_Y && ty < BTN_SET_Y + BTN_SET_H) {
       inMenu = true;
