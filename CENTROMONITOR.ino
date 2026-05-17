@@ -13,11 +13,11 @@
 
 #define MI_NEGRO    0x0000
 #define MI_MORADO   0xA01F
-#define MI_CYAN     0x07FF
-#define MI_ROJO     0xF800
-#define MI_AZUL     0x041F
-#define MI_AZUL2    TFT_CYAN
-#define MI_AMARILLO 0xFFE0
+#define MI_CYAN     0xFFE0
+#define MI_ROJO     0x001F
+#define MI_AZUL     0xF800
+#define MI_AZUL2    0xF800
+#define MI_AMARILLO 0x07FF
 #define MI_GRIS0    0x0000
 #define MI_GRIS1    TFT_BLACK
 #define MI_GRIS2    TFT_BLACK
