@@ -109,6 +109,8 @@ int lastSecond = -1;
 
 const int BTN_RIEGO_X = 170, BTN_RIEGO_Y = 195, BTN_RIEGO_W = 70, BTN_RIEGO_H = 34;
 const int BTN_SET_X = 246, BTN_SET_Y = 195, BTN_SET_W = 70, BTN_SET_H = 34;
+const int PH_SCALE_X = 282, PH_SCALE_Y = 72, PH_SCALE_W = 26, PH_BAR_H = 108, PH_BAR_X = PH_SCALE_X + 12, PH_BAR_W = 6;
+void redrawTouchArea(int x, int y);
 
 void saveSoilThreshold() {
   preferences.putFloat("soilTh", soilThreshold);
@@ -238,7 +240,6 @@ void drawStaticBackground() {
   tft.setTextColor(MI_AZUL2);
   tft.setCursor(172, 62); tft.print("VPD");
   tft.setCursor(172, 142); tft.print("PPM/EC");
-  tft.setCursor(12, 205); tft.print("CO2");
   tft.setTextColor(MI_CYAN);
   tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print("OFF");
 
@@ -291,11 +292,9 @@ uint16_t getVPDColor(float vpd) {
 }
 
 int phToY(float ph) {
-  const int topY = 84;
-  const int barH = 84;
   float clamped = constrain(ph, 2.0f, 12.0f);
   float ratio = (clamped - 2.0f) / 10.0f;
-  return topY + barH - 1 - (int)((barH - 1) * ratio);
+  return PH_SCALE_Y + PH_BAR_H - 1 - (int)((PH_BAR_H - 1) * ratio);
 }
 
 uint16_t getPHScaleColor(float p) {
@@ -307,34 +306,29 @@ uint16_t getPHScaleColor(float p) {
 }
 
 void drawPHScaleStatic() {
-  const int scaleX = 282;
-  const int scaleY = 84;
-  const int scaleW = 26;
-  const int barX = scaleX + 13;
-  const int barW = 5;
-  const int barH = 84;
-
-  tft.fillRect(scaleX, scaleY, scaleW, barH, MI_NEGRO);
+  tft.fillRect(PH_SCALE_X, PH_SCALE_Y, PH_SCALE_W, PH_BAR_H, MI_NEGRO);
 
   for (int p = 2; p <= 12; p++) {
     int y = phToY((float)p);
     uint16_t c = getPHScaleColor((float)p);
-    tft.drawFastHLine(barX - 2, y, barW + 4, c);
+    tft.drawFastHLine(PH_BAR_X - 2, y, PH_BAR_W + 4, blend565(c, MI_NEGRO, 100));
+    tft.drawFastHLine(PH_BAR_X - 1, y, PH_BAR_W + 2, c);
     tft.setTextColor(c, MI_NEGRO);
     tft.setTextSize(1);
     tft.setTextFont(1);
-    tft.setCursor(scaleX + 2, y - 2);
+    tft.setCursor(PH_SCALE_X + 1, y - 2);
     tft.print(p);
   }
 
-  tft.drawRoundRect(barX - 1, scaleY - 1, barW + 2, barH + 2, 2, MI_AZUL2);
+  tft.drawRoundRect(PH_BAR_X - 2, PH_SCALE_Y - 2, PH_BAR_W + 4, PH_BAR_H + 4, 3, blend565(MI_AZUL2, MI_NEGRO, 100));
+  tft.drawRoundRect(PH_BAR_X - 1, PH_SCALE_Y - 1, PH_BAR_W + 2, PH_BAR_H + 2, 2, MI_AZUL2);
 }
 
 void drawPHIndicator(float ph) {
-  const int areaX = 218;
-  const int areaY = 84;
-  const int areaW = 62;
-  const int areaH = 84;
+  const int areaX = 248;
+  const int areaY = PH_SCALE_Y;
+  const int areaW = 32;
+  const int areaH = PH_BAR_H;
   int y = phToY(ph);
 
   if (fabs(ph - lastPhIndicatorValue) < 0.01f && abs(y - lastPhIndicatorY) <= 0) return;
@@ -344,8 +338,8 @@ void drawPHIndicator(float ph) {
   tft.setTextColor(c, MI_NEGRO);
   tft.setTextSize(1);
   tft.setTextFont(1);
-  tft.setCursor(areaX + 10, y - 2);
-  tft.print("> ");
+  tft.fillCircle(PH_BAR_X + (PH_BAR_W / 2), y, 2, MI_ROJO_CLARO);
+  tft.setCursor(areaX + 2, y - 2);
   tft.print(ph, 1);
 
   lastPhIndicatorY = y;
@@ -397,10 +391,46 @@ void drawCO2HudCard(float co2, bool forceRedraw = false) {
   valueSprite.setTextSize(1);
   valueSprite.setTextFont(1);
   valueSprite.setTextDatum(TL_DATUM);
-  valueSprite.drawString(String("CO2 ") + valStr, 0, 2);
+  valueSprite.drawString(String(valStr), 0, 2);
   valueSprite.pushSprite(cardX + 4, cardY + 3);
 
   lastCO2 = co2;
+}
+
+void redrawTouchArea(int x, int y) {
+  if (x >= 6 && x <= 156 && y >= 52 && y <= 190) {
+    drawDarkCard(6, 52, 150, 138, MI_GRIS1, MI_GRIS0, MI_CYAN);
+    tft.setTextColor(MI_AZUL2);
+    tft.setTextSize(1);
+    tft.setCursor(18, 58); tft.print("10 CM");
+    tft.setCursor(90, 58); tft.print("20 CM");
+    drawSoilBar(22, 70, 48, 105, remoteSoil1, -999, "");
+    drawSoilBar(86, 70, 48, 105, remoteSoil2, -999, "");
+  } else if (x >= 162 && x <= 314 && y >= 52 && y <= 190) {
+    drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2);
+    tft.setTextColor(MI_AZUL2);
+    tft.setCursor(172, 62); tft.print("VPD");
+    tft.setCursor(172, 142); tft.print("PPM/EC");
+    drawPHScaleStatic();
+    drawPHIndicator(phValue);
+    char vpdStr[10]; sprintf(vpdStr, "%.2f", vpd);
+    pushValue(168, 78, 100, 18, String(vpdStr), getVPDColor(vpd), 2);
+    char tdsStr[10]; sprintf(tdsStr, "%.0f", tdsValue);
+    pushValue(168, 158, 140, 18, String(tdsStr), MI_MORADO, 2);
+  } else if (x >= 10 && x <= 108 && y >= 217 && y <= 237) {
+    drawCO2HudCard(remoteCO2, true);
+  } else if (x >= BTN_RIEGO_X && x <= BTN_RIEGO_X + BTN_RIEGO_W && y >= BTN_RIEGO_Y && y <= BTN_RIEGO_Y + BTN_RIEGO_H) {
+    drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, manualWatering ? MI_ROJO : MI_CYAN);
+    tft.setTextColor(manualWatering ? MI_ROJO_CLARO : MI_CYAN);
+    tft.setTextSize(1);
+    tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print(manualWatering ? "ON " : "OFF");
+  } else if (x >= BTN_SET_X && x <= BTN_SET_X + BTN_SET_W && y >= BTN_SET_Y && y <= BTN_SET_Y + BTN_SET_H) {
+    drawDarkCard(BTN_SET_X, BTN_SET_Y, BTN_SET_W, BTN_SET_H, MI_GRIS2, MI_GRIS0, MI_CYAN);
+    tft.setTextColor(MI_CYAN);
+    tft.setCursor(BTN_SET_X + 10, BTN_SET_Y + 12); tft.print("SET SOIL");
+  } else {
+    tft.fillRect(max(0, x - 3), max(0, y - 3), 7, 7, MI_NEGRO);
+  }
 }
 
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
@@ -521,7 +551,6 @@ void loop() {
       tft.setTextColor(MI_AZUL2);
       tft.setCursor(172, 62); tft.print("VPD");
       tft.setCursor(172, 142); tft.print("PPM/EC");
-      tft.setCursor(12, 205); tft.print("CO2");
       drawPHScaleStatic();
       lastPhIndicatorValue = -999;
       co2CardNeedsFullRedraw = true;
@@ -605,18 +634,11 @@ void loop() {
 
   int tx = 0, ty = 0;
   if (readTouchScreen(tx, ty)) {
-    if (lastTouchX >= 0 && lastTouchY >= 0 && millis() - touchDotTime >= 120) {
-      tft.fillRect(lastTouchX - 5, lastTouchY - 5, 10, 10, MI_NEGRO);
-      tft.drawPixel(lastTouchX, lastTouchY, MI_CYAN);
-      tft.drawPixel(lastTouchX - 1, lastTouchY, MI_AZUL2);
-      tft.drawPixel(lastTouchX + 1, lastTouchY, MI_AZUL2);
-      tft.drawPixel(lastTouchX, lastTouchY - 1, MI_AZUL2);
-      tft.drawPixel(lastTouchX, lastTouchY + 1, MI_AZUL2);
-    }
+    if (lastTouchX >= 0 && lastTouchY >= 0 && millis() - touchDotTime >= 80) redrawTouchArea(lastTouchX, lastTouchY);
     lastTouchX = tx;
     lastTouchY = ty;
     touchDotTime = millis();
-    tft.fillCircle(tx, ty, 3, MI_CYAN);
+    tft.fillCircle(tx, ty, 2, blend565(MI_CYAN, MI_NEGRO, 120));
 
     if (!inMenu && tx > BTN_RIEGO_X && tx < BTN_RIEGO_X + BTN_RIEGO_W && ty > BTN_RIEGO_Y && ty < BTN_RIEGO_Y + BTN_RIEGO_H) {
       manualWatering = !manualWatering;
@@ -657,7 +679,6 @@ void loop() {
     tft.setTextColor(MI_AZUL2);
     tft.setCursor(172, 62); tft.print("VPD");
     tft.setCursor(172, 142); tft.print("PPM/EC");
-    tft.setCursor(12, 205); tft.print("CO2");
     drawPHScaleStatic();
     lastPhIndicatorValue = -999;
     co2CardNeedsFullRedraw = true;
@@ -666,7 +687,7 @@ void loop() {
   }
 
   if (lastTouchX >= 0 && lastTouchY >= 0 && millis() - touchDotTime >= 120) {
-    tft.fillRect(lastTouchX - 5, lastTouchY - 5, 10, 10, MI_NEGRO);
+    redrawTouchArea(lastTouchX, lastTouchY);
     lastTouchX = -1;
     lastTouchY = -1;
   }
