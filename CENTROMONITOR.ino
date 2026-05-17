@@ -112,10 +112,12 @@ bool co2CardNeedsFullRedraw = true;
 int lastSecond = -1;
 
 const int BTN_RIEGO_X = 170, BTN_RIEGO_Y = 195, BTN_RIEGO_W = 70, BTN_RIEGO_H = 34;
-const int BTN_PUMP_X = 246, BTN_PUMP_Y = 195, BTN_PUMP_W = 146, BTN_PUMP_H = 34;
+const int BTN_PUMP_X = 246, BTN_PUMP_Y = 195, BTN_PUMP_W = 70, BTN_PUMP_H = 34;
 const int PH_SCALE_X = 276, PH_SCALE_Y = 72, PH_SCALE_W = 26, PH_BAR_H = 93, PH_BAR_X = PH_SCALE_X + 12, PH_BAR_W = 6;
 const int SOIL_BAR_Y = 70, SOIL_BAR_W = 48, SOIL_BAR_H = 105;
 const int SOIL1_BAR_X = 22, SOIL2_BAR_X = 86;
+const int MENU_W = 190, MENU_H = 140;
+const int MENU_X = (320 - MENU_W) / 2, MENU_Y = (240 - MENU_H) / 2;
 void redrawTouchArea(int x, int y);
 void drawPumpButton();
 void drawHumIndicator();
@@ -263,7 +265,7 @@ void drawStaticBackground() {
   tft.setCursor(172, 62); tft.print("VPD");
   tft.setCursor(172, 142); tft.print("PPM/EC");
   tft.setTextColor(MI_BLANCO);
-  tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print("OFF");
+  tft.setCursor(BTN_RIEGO_X + 14, BTN_RIEGO_Y + 12); tft.print("RIEGO");
 
   drawPHScaleStatic();
 
@@ -475,11 +477,11 @@ void drawCO2HudCard(float co2, bool forceRedraw = false) {
 
 
 void drawPumpButton() {
-  drawDarkCard(BTN_PUMP_X, BTN_PUMP_Y, BTN_PUMP_W, BTN_PUMP_H, MI_GRIS2, MI_GRIS0, manualPump ? MI_ROJO : MI_CYAN, MI_AMARILLO);
-  tft.setTextColor(manualPump ? MI_ROJO_CLARO : MI_BLANCO);
+  drawDarkCard(BTN_PUMP_X, BTN_PUMP_Y, BTN_PUMP_W, BTN_PUMP_H, MI_GRIS2, MI_GRIS0, manualPump ? MI_MORADO : MI_CYAN, manualPump ? MI_ROJO : MI_AMARILLO);
+  tft.setTextColor(MI_BLANCO);
   tft.setTextSize(1);
-  tft.setCursor(BTN_PUMP_X + 54, BTN_PUMP_Y + 12);
-  tft.print("PUMP");
+  tft.setCursor(BTN_PUMP_X + 16, BTN_PUMP_Y + 12);
+  tft.print("EC/pH");
 }
 
 void drawHumIndicator() {
@@ -513,10 +515,10 @@ void redrawTouchArea(int x, int y) {
   } else if (x >= 10 && x <= 142 && y >= 204 && y <= 234) {
     drawCO2HudCard(remoteCO2, true);
   } else if (x >= BTN_RIEGO_X && x <= BTN_RIEGO_X + BTN_RIEGO_W && y >= BTN_RIEGO_Y && y <= BTN_RIEGO_Y + BTN_RIEGO_H) {
-    drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, manualWatering ? MI_ROJO : MI_CYAN, MI_AMARILLO);
-    tft.setTextColor(manualWatering ? MI_ROJO_CLARO : MI_CYAN);
+    drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, manualWatering ? MI_ROJO : MI_CYAN, manualWatering ? MI_ROJO : MI_AMARILLO);
+    tft.setTextColor(MI_BLANCO);
     tft.setTextSize(1);
-    tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print(manualWatering ? "ON " : "OFF");
+    tft.setCursor(BTN_RIEGO_X + 14, BTN_RIEGO_Y + 12); tft.print("RIEGO");
   } else if (x >= BTN_PUMP_X && x <= BTN_PUMP_X + BTN_PUMP_W && y >= BTN_PUMP_Y && y <= BTN_PUMP_Y + BTN_PUMP_H) {
     drawPumpButton();
   } else {
@@ -626,7 +628,7 @@ void setup() {
   menuSprite.setColorDepth(16);
   valueSprite.setColorDepth(8);
 
-  menuSprite.createSprite(140, 110);
+  menuSprite.createSprite(MENU_W, MENU_H);
   valueSprite.createSprite(80, 30);
   drawStaticBackground();
   co2CardNeedsFullRedraw = true;
@@ -639,7 +641,7 @@ void loop() {
     lastMenuDebounceMs = millis();
     menuNeedsRedraw = true;
     if (!inMenu && menuVisible) {
-      tft.fillRect(176, 84, 140, 110, MI_NEGRO);
+      tft.fillRect(MENU_X, MENU_Y, MENU_W, MENU_H, MI_NEGRO);
       drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2, MI_AMARILLO);
       tft.setTextColor(MI_BLANCO);
       tft.setCursor(172, 62); tft.print("VPD");
@@ -794,10 +796,10 @@ void loop() {
 
     if (!inMenu && tx > BTN_RIEGO_X && tx < BTN_RIEGO_X + BTN_RIEGO_W && ty > BTN_RIEGO_Y && ty < BTN_RIEGO_Y + BTN_RIEGO_H) {
       manualWatering = !manualWatering;
-      drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, manualWatering ? MI_ROJO : MI_CYAN, MI_AMARILLO);
-      tft.setTextColor(manualWatering ? MI_ROJO_CLARO : MI_CYAN);
+      drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, manualWatering ? MI_ROJO : MI_CYAN, manualWatering ? MI_ROJO : MI_AMARILLO);
+      tft.setTextColor(MI_BLANCO);
       tft.setTextSize(1);
-      tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print(manualWatering ? "ON " : "OFF");
+      tft.setCursor(BTN_RIEGO_X + 14, BTN_RIEGO_Y + 12); tft.print("RIEGO");
     }
     if (!inMenu &&
       tx > BTN_PUMP_X &&
@@ -808,30 +810,31 @@ void loop() {
       manualPump = !manualPump;
       drawPumpButton();
     }
-    if (inMenu && tx > 280 && tx < 306 && ty > 82 && ty < 102) { inMenu = false; menuNeedsRedraw = true; }
-    if (inMenu && tx > 185 && tx < 225 && ty > 165 && ty < 200) { soilThreshold = min(95.0f, soilThreshold + 1); saveSoilThreshold(); menuNeedsRedraw = true; }
-    if (inMenu && tx > 250 && tx < 290 && ty > 165 && ty < 200) { soilThreshold = max(5.0f, soilThreshold - 1); saveSoilThreshold(); menuNeedsRedraw = true; }
+    if (inMenu && tx > (MENU_X + MENU_W - 26) && tx < (MENU_X + MENU_W - 6) && ty > (MENU_Y + 6) && ty < (MENU_Y + 26)) { inMenu = false; menuNeedsRedraw = true; }
+    if (inMenu && tx > (MENU_X + 22) && tx < (MENU_X + 82) && ty > (MENU_Y + 90) && ty < (MENU_Y + 130)) { soilThreshold = min(95.0f, soilThreshold + 1); saveSoilThreshold(); menuNeedsRedraw = true; }
+    if (inMenu && tx > (MENU_X + 108) && tx < (MENU_X + 168) && ty > (MENU_Y + 90) && ty < (MENU_Y + 130)) { soilThreshold = max(5.0f, soilThreshold - 1); saveSoilThreshold(); menuNeedsRedraw = true; }
   }
 
   if (inMenu) {
     if (menuNeedsRedraw) {
       menuSprite.fillSprite(MI_NEGRO);
-      menuSprite.fillRoundRect(0, 0, 140, 110, 8, MI_GRIS0);
-      menuSprite.drawRoundRect(0, 0, 140, 110, 8, MI_CYAN);
-      menuSprite.drawRoundRect(1, 1, 138, 108, 8, MI_AZUL2);
-      menuSprite.setTextColor(MI_BLANCO); menuSprite.setTextSize(1);
-      menuSprite.setCursor(36, 10); menuSprite.print("SET SOIL");
+      menuSprite.fillRoundRect(0, 0, MENU_W, MENU_H, 10, MI_GRIS0);
+      menuSprite.drawRoundRect(0, 0, MENU_W, MENU_H, 10, MI_CYAN);
+      menuSprite.drawRoundRect(1, 1, MENU_W - 2, MENU_H - 2, 10, MI_AZUL2);
+      menuSprite.setTextColor(MI_BLANCO); menuSprite.setTextSize(2);
+      menuSprite.setCursor(48, 14); menuSprite.print("SET SOIL");
+      menuSprite.setTextSize(3);
+      menuSprite.setCursor(66, 50); menuSprite.print(soilThreshold, 0); menuSprite.print("%");
       menuSprite.setTextSize(2);
-      menuSprite.setCursor(46, 36); menuSprite.print(soilThreshold, 0); menuSprite.print("%");
-      menuSprite.drawRoundRect(15, 70, 45, 30, 4, MI_CYAN); menuSprite.setCursor(30, 78); menuSprite.print("+");
-      menuSprite.drawRoundRect(80, 70, 45, 30, 4, MI_CYAN); menuSprite.setCursor(95, 78); menuSprite.print("-");
-      menuSprite.setTextSize(1); menuSprite.setCursor(125, 6); menuSprite.print("X");
+      menuSprite.drawRoundRect(22, 90, 60, 40, 6, MI_CYAN); menuSprite.setCursor(44, 102); menuSprite.print("+");
+      menuSprite.drawRoundRect(108, 90, 60, 40, 6, MI_CYAN); menuSprite.setCursor(131, 102); menuSprite.print("-");
+      menuSprite.setTextSize(2); menuSprite.setCursor(MENU_W - 24, 8); menuSprite.print("X");
       menuNeedsRedraw = false;
     }
-    menuSprite.pushSprite(176, 84);
+    menuSprite.pushSprite(MENU_X, MENU_Y);
     menuVisible = true;
   } else if (menuVisible) {
-    tft.fillRect(176, 84, 140, 110, MI_NEGRO);
+    tft.fillRect(MENU_X, MENU_Y, MENU_W, MENU_H, MI_NEGRO);
     drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2, MI_AMARILLO);
     tft.setTextColor(MI_BLANCO);
     tft.setCursor(172, 62); tft.print("VPD");
