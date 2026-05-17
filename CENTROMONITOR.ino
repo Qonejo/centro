@@ -9,6 +9,7 @@
 #include <RTClib.h>
 #include <WiFi.h>
 #include <esp_now.h>
+#include <Preferences.h>
 
 #define MI_NEGRO    0x0000
 #define MI_MORADO   0xA01F
@@ -41,6 +42,7 @@ XPT2046_Touchscreen ts(TOUCH_CS);
 Adafruit_BME280 bme;
 Adafruit_ADS1115 ads;
 RTC_DS3231 rtc;
+Preferences preferences;
 
 typedef struct struct_message {
   int lightHours;
@@ -91,7 +93,6 @@ bool relayState = false, humidifierState = false, inMenu = false, lastButtonStat
 bool espNowLastSendOk = false;
 bool manualWatering = false;
 int lastTouchX = -1, lastTouchY = -1;
-unsigned long manualWaterStart = 0;
 unsigned long lastMenuDebounceMs = 0;
 unsigned long lastHeapLogMs = 0;
 
@@ -105,6 +106,10 @@ int lastSecond = -1;
 
 const int BTN_RIEGO_X = 170, BTN_RIEGO_Y = 195, BTN_RIEGO_W = 70, BTN_RIEGO_H = 34;
 const int BTN_SET_X = 246, BTN_SET_Y = 195, BTN_SET_W = 70, BTN_SET_H = 34;
+
+void saveSoilThreshold() {
+  preferences.putFloat("soilTh", soilThreshold);
+}
 
 float readTDS() {
   long total = 0;
@@ -219,7 +224,9 @@ void drawStaticBackground() {
   tft.setTextColor(MI_AZUL2);
   tft.setTextSize(1);
   tft.setCursor(14, 10); tft.print("HORA");
+  tft.setTextColor(MI_ROJO_CLARO);
   tft.setCursor(120, 10); tft.print("TEMP");
+  tft.setTextColor(MI_AZUL2);
   tft.setCursor(226, 10); tft.print("HUM");
 
   tft.setCursor(18, 58); tft.setTextColor(MI_AZUL2); tft.print("10 CM");
@@ -227,12 +234,10 @@ void drawStaticBackground() {
 
   tft.setTextColor(MI_AZUL2);
   tft.setCursor(172, 62); tft.print("VPD");
-  tft.setCursor(172, 102); tft.print("pH");
-  tft.setCursor(172, 142); tft.print("PPM");
+  tft.setCursor(172, 142); tft.print("PPM/EC");
   tft.setCursor(12, 205); tft.print("CO2");
-
-  tft.setTextColor(MI_AZUL2);
-  tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print("RIEGO");
+  tft.setTextColor(MI_CYAN);
+  tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print("OFF");
 
   drawPHScaleStatic();
 
@@ -283,8 +288,8 @@ uint16_t getVPDColor(float vpd) {
 }
 
 int phToY(float ph) {
-  const int topY = 74;
-  const int barH = 108;
+  const int topY = 84;
+  const int barH = 84;
   float clamped = constrain(ph, 2.0f, 12.0f);
   float ratio = (clamped - 2.0f) / 10.0f;
   return topY + barH - 1 - (int)((barH - 1) * ratio);
@@ -299,19 +304,19 @@ uint16_t getPHScaleColor(float p) {
 }
 
 void drawPHScaleStatic() {
-  const int scaleX = 268;
-  const int scaleY = 74;
-  const int scaleW = 36;
-  const int barX = scaleX + 18;
-  const int barW = 8;
-  const int barH = 108;
+  const int scaleX = 282;
+  const int scaleY = 84;
+  const int scaleW = 26;
+  const int barX = scaleX + 13;
+  const int barW = 5;
+  const int barH = 84;
 
   tft.fillRect(scaleX, scaleY, scaleW, barH, MI_NEGRO);
 
   for (int p = 2; p <= 12; p++) {
     int y = phToY((float)p);
     uint16_t c = getPHScaleColor((float)p);
-    tft.drawFastHLine(barX - 4, y, barW + 8, c);
+    tft.drawFastHLine(barX - 2, y, barW + 4, c);
     tft.setTextColor(c, MI_NEGRO);
     tft.setTextSize(1);
     tft.setCursor(scaleX + 1, y - 3);
@@ -322,10 +327,10 @@ void drawPHScaleStatic() {
 }
 
 void drawPHIndicator(float ph) {
-  const int areaX = 208;
-  const int areaY = 74;
-  const int areaW = 58;
-  const int areaH = 108;
+  const int areaX = 218;
+  const int areaY = 84;
+  const int areaW = 62;
+  const int areaH = 84;
   int y = phToY(ph);
 
   if (fabs(ph - lastPhIndicatorValue) < 0.01f && abs(y - lastPhIndicatorY) <= 0) return;
@@ -333,8 +338,8 @@ void drawPHIndicator(float ph) {
   tft.fillRect(areaX, areaY, areaW, areaH, MI_NEGRO);
   uint16_t c = getPHScaleColor(ph);
   tft.setTextColor(c, MI_NEGRO);
-  tft.setTextSize(2);
-  tft.setCursor(areaX + 2, y - 8);
+  tft.setTextSize(1);
+  tft.setCursor(areaX + 2, y - 3);
   tft.print("> ");
   tft.print(ph, 1);
 
@@ -416,6 +421,8 @@ void setup() {
   pinMode(RELAY_PIN, OUTPUT);
   pinMode(HUMIDIFIER_PIN, OUTPUT);
   pinMode(MENU_BUTTON_PIN, INPUT);
+  preferences.begin("centro", false);
+  soilThreshold = preferences.getFloat("soilTh", 40.0f);
 
   WiFi.mode(WIFI_STA);
   if (esp_now_init() == ESP_OK) {
@@ -456,8 +463,7 @@ void loop() {
       drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2);
       tft.setTextColor(MI_AZUL2);
       tft.setCursor(172, 62); tft.print("VPD");
-      tft.setCursor(172, 102); tft.print("pH");
-      tft.setCursor(172, 142); tft.print("PPM");
+      tft.setCursor(172, 142); tft.print("PPM/EC");
       tft.setCursor(12, 205); tft.print("CO2");
       drawPHScaleStatic();
       lastPhIndicatorValue = -999;
@@ -480,7 +486,6 @@ void loop() {
 
   if (manualWatering) {
     digitalWrite(RELAY_PIN, LOW); relayState = true;
-    if (millis() - manualWaterStart >= 10000) manualWatering = false;
   } else if (soil1 < soilThreshold || soil2 < soilThreshold) {
     digitalWrite(RELAY_PIN, LOW); relayState = true;
   } else {
@@ -506,8 +511,8 @@ void loop() {
     lastAirHum = airHum;
   }
 
-  drawSoilBar(22, 70, 48, 105, remoteSoil1, lastSoil1, "10 CM");
-  drawSoilBar(86, 70, 48, 105, remoteSoil2, lastSoil2, "20 CM");
+  drawSoilBar(22, 70, 48, 105, remoteSoil1, lastSoil1, "");
+  drawSoilBar(86, 70, 48, 105, remoteSoil2, lastSoil2, "");
   lastSoil1 = remoteSoil1; lastSoil2 = remoteSoil2;
 
   if (fabs(vpd - lastVpd) > 0.02) {
@@ -559,16 +564,19 @@ void loop() {
     tft.fillCircle(tx, ty, 3, MI_CYAN);
 
     if (!inMenu && tx > BTN_RIEGO_X && tx < BTN_RIEGO_X + BTN_RIEGO_W && ty > BTN_RIEGO_Y && ty < BTN_RIEGO_Y + BTN_RIEGO_H) {
-      manualWatering = true;
-      manualWaterStart = millis();
+      manualWatering = !manualWatering;
+      drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, manualWatering ? MI_ROJO : MI_CYAN);
+      tft.setTextColor(manualWatering ? MI_ROJO_CLARO : MI_CYAN);
+      tft.setTextSize(1);
+      tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print(manualWatering ? "ON " : "OFF");
     }
     if (!inMenu && tx > BTN_SET_X && tx < BTN_SET_X + BTN_SET_W && ty > BTN_SET_Y && ty < BTN_SET_Y + BTN_SET_H) {
       inMenu = true;
       menuNeedsRedraw = true;
     }
     if (inMenu && tx > 280 && tx < 306 && ty > 82 && ty < 102) { inMenu = false; menuNeedsRedraw = true; }
-    if (inMenu && tx > 185 && tx < 225 && ty > 165 && ty < 200) { soilThreshold = min(95.0f, soilThreshold + 1); menuNeedsRedraw = true; }
-    if (inMenu && tx > 250 && tx < 290 && ty > 165 && ty < 200) { soilThreshold = max(5.0f, soilThreshold - 1); menuNeedsRedraw = true; }
+    if (inMenu && tx > 185 && tx < 225 && ty > 165 && ty < 200) { soilThreshold = min(95.0f, soilThreshold + 1); saveSoilThreshold(); menuNeedsRedraw = true; }
+    if (inMenu && tx > 250 && tx < 290 && ty > 165 && ty < 200) { soilThreshold = max(5.0f, soilThreshold - 1); saveSoilThreshold(); menuNeedsRedraw = true; }
   }
 
   if (inMenu) {
@@ -591,11 +599,10 @@ void loop() {
   } else if (menuVisible) {
     tft.fillRect(176, 84, 140, 110, MI_NEGRO);
     drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2);
-      tft.setTextColor(MI_AZUL2);
-      tft.setCursor(172, 62); tft.print("VPD");
-      tft.setCursor(172, 102); tft.print("pH");
-      tft.setCursor(172, 142); tft.print("PPM");
-      tft.setCursor(12, 205); tft.print("CO2");
+    tft.setTextColor(MI_AZUL2);
+    tft.setCursor(172, 62); tft.print("VPD");
+    tft.setCursor(172, 142); tft.print("PPM/EC");
+    tft.setCursor(12, 205); tft.print("CO2");
     drawPHScaleStatic();
     lastPhIndicatorValue = -999;
     menuVisible = false;
