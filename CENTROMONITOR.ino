@@ -13,10 +13,10 @@
 
 #define MI_NEGRO    0x0000
 #define MI_MORADO   0xA01F
-#define MI_CYAN     0xFFE0
-#define MI_ROJO     0x001F
-#define MI_AZUL     0xF800
-#define MI_AZUL2    0xFFE0
+#define MI_CYAN     0x07FF
+#define MI_ROJO     0xF800
+#define MI_AZUL     0x041F
+#define MI_AZUL2    TFT_CYAN
 #define MI_AMARILLO 0xFFE0
 #define MI_GRIS0    0x0000
 #define MI_GRIS1    TFT_BLACK
@@ -228,7 +228,7 @@ void drawStaticBackground() {
 
   drawDarkCard(4, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_CYAN);
   drawDarkCard(109, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_ROJO);
-  drawDarkCard(214, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_AZUL2);
+  drawDarkCard(214, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_CYAN);
 
   drawDarkCard(6, 52, 150, 138, MI_GRIS1, MI_GRIS0, MI_CYAN);
   drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2);
@@ -244,8 +244,8 @@ void drawStaticBackground() {
   tft.setTextColor(MI_CYAN);
   tft.setCursor(226, 10); tft.print("HUM");
 
-  tft.setCursor(18, 62); tft.setTextColor(MI_AZUL2); tft.print("10 CM");
-  tft.setCursor(90, 62); tft.print("20 CM");
+  tft.setCursor(18, 58); tft.setTextColor(MI_AZUL2); tft.print("10 CM");
+  tft.setCursor(90, 58); tft.print("20 CM");
 
   tft.setTextColor(MI_AZUL2);
   tft.setCursor(172, 62); tft.print("VPD");
@@ -441,8 +441,8 @@ void redrawTouchArea(int x, int y) {
     drawDarkCard(6, 52, 150, 138, MI_GRIS1, MI_GRIS0, MI_CYAN);
     tft.setTextColor(MI_AZUL2);
     tft.setTextSize(1);
-    tft.setCursor(18, 62); tft.print("10 CM");
-    tft.setCursor(90, 62); tft.print("20 CM");
+    tft.setCursor(18, 58); tft.print("10 CM");
+    tft.setCursor(90, 58); tft.print("20 CM");
     drawSoilBar(22, 70, 48, 105, remoteSoil1, -999, "");
     drawSoilBar(86, 70, 48, 105, remoteSoil2, -999, "");
   } else if (x >= 162 && x <= 314 && y >= 52 && y <= 190) {
