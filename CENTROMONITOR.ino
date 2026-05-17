@@ -631,8 +631,55 @@ void loop() {
     digitalWrite(RELAY_PIN, HIGH); relayState = false;
   }
 
-  if (airTemp >= 29) { digitalWrite(HUMIDIFIER_PIN, HIGH); humidifierState = true; }
-  if (airTemp <= 27) { digitalWrite(HUMIDIFIER_PIN, LOW); humidifierState = false; }
+  String currentStage;
+  float targetVPDMin = 0.81f;
+  float targetVPDMax = 1.19f;
+  const float vpdHysteresis = 0.05f;
+
+  if (remoteVegetative) {
+    if (remoteDaysVeg <= 14) {
+      currentStage = "SEEDLING";
+      targetVPDMin = 0.40f;
+      targetVPDMax = 0.79f;
+    } else if (remoteDaysVeg <= 42) {
+      currentStage = "VEG";
+      targetVPDMin = 0.81f;
+      targetVPDMax = 1.19f;
+    } else {
+      currentStage = "LATE VEG";
+      targetVPDMin = 0.81f;
+      targetVPDMax = 1.19f;
+    }
+  } else {
+    if (remoteDaysFlower <= 42) {
+      currentStage = "FLOWER";
+      targetVPDMin = 0.81f;
+      targetVPDMax = 1.19f;
+    } else {
+      currentStage = "LATE FLOWER";
+      targetVPDMin = 1.21f;
+      targetVPDMax = 1.60f;
+    }
+  }
+
+  if (vpd > targetVPDMax) {
+    digitalWrite(HUMIDIFIER_PIN, HIGH);
+    humidifierState = true;
+  } else if (vpd <= (targetVPDMax - vpdHysteresis)) {
+    digitalWrite(HUMIDIFIER_PIN, LOW);
+    humidifierState = false;
+  }
+
+  Serial.print("ETAPA: ");
+  Serial.println(currentStage);
+  Serial.print("TARGET VPD: ");
+  Serial.print(targetVPDMin);
+  Serial.print(" - ");
+  Serial.println(targetVPDMax);
+  Serial.print("VPD ACTUAL: ");
+  Serial.println(vpd);
+  Serial.print("HUMIDIFIER: ");
+  Serial.println(humidifierState ? "ON" : "OFF");
 
   if (remoteSecond != lastSecond) {
     char timeStr[10]; sprintf(timeStr, "%02d:%02d:%02d", remoteHour, remoteMinute, remoteSecond);
