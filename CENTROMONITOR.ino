@@ -434,7 +434,7 @@ void drawCO2HudCard(float co2, bool forceRedraw = false) {
   tft.drawRoundRect(cardX, cardY, cardW, cardH, 5, border);
 
   char valStr[16];
-  sprintf(valStr, "CO2: %.0f PPM", co2);
+  sprintf(valStr, "CO2:%.0fPPM", co2);
   valueSprite.deleteSprite();
   valueSprite.setColorDepth(8);
   valueSprite.createSprite(cardW - 8, cardH - 8);
