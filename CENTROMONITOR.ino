@@ -81,6 +81,8 @@ uint8_t macSoilNode[] = {0xAC, 0xA7, 0x04, 0xB8, 0x0C, 0xAC};
 float airTemp = 0, airHum = 0, soil1 = 0, soil2 = 0, phValue = 0, tdsValue = 0, vpd = 0;
 float remoteSoil1 = 0, remoteSoil2 = 0;
 float remoteCO2 = 0, lastCO2 = -999;
+bool lastCO2BlinkOn = false;
+unsigned long lastCO2BlinkToggleMs = 0;
 int remoteLightHours = 0, remoteDarkHours = 0, remoteDaysVeg = 0, remoteDaysFlower = 0;
 bool remoteVegetative = true, remoteLightMode = true;
 float remoteProgress = 0;
@@ -102,6 +104,7 @@ bool menuVisible = false;
 float lastAirTemp = -999, lastAirHum = -999, lastSoil1 = -999, lastSoil2 = -999, lastPh = -999, lastTds = -999, lastVpd = -999;
 int lastPhIndicatorY = -999;
 float lastPhIndicatorValue = -999;
+bool co2CardNeedsFullRedraw = true;
 int lastSecond = -1;
 
 const int BTN_RIEGO_X = 170, BTN_RIEGO_Y = 195, BTN_RIEGO_W = 70, BTN_RIEGO_H = 34;
@@ -319,7 +322,8 @@ void drawPHScaleStatic() {
     tft.drawFastHLine(barX - 2, y, barW + 4, c);
     tft.setTextColor(c, MI_NEGRO);
     tft.setTextSize(1);
-    tft.setCursor(scaleX + 1, y - 3);
+    tft.setTextFont(1);
+    tft.setCursor(scaleX + 2, y - 2);
     tft.print(p);
   }
 
@@ -339,12 +343,64 @@ void drawPHIndicator(float ph) {
   uint16_t c = getPHScaleColor(ph);
   tft.setTextColor(c, MI_NEGRO);
   tft.setTextSize(1);
-  tft.setCursor(areaX + 2, y - 3);
+  tft.setTextFont(1);
+  tft.setCursor(areaX + 10, y - 2);
   tft.print("> ");
   tft.print(ph, 1);
 
   lastPhIndicatorY = y;
   lastPhIndicatorValue = ph;
+}
+
+
+
+void drawCO2HudCard(float co2, bool forceRedraw = false) {
+  const int cardX = 10;
+  const int cardY = 217;
+  const int cardW = 98;
+  const int cardH = 20;
+  const bool danger = co2 >= 1900.0f;
+
+  if (danger && millis() - lastCO2BlinkToggleMs >= 350) {
+    lastCO2BlinkOn = !lastCO2BlinkOn;
+    lastCO2BlinkToggleMs = millis();
+    forceRedraw = true;
+  }
+
+  if (!danger && lastCO2BlinkOn) {
+    lastCO2BlinkOn = false;
+    forceRedraw = true;
+  }
+
+  if (!forceRedraw && fabs(co2 - lastCO2) <= 0.5f) return;
+
+  uint16_t bg = TFT_WHITE;
+  uint16_t border = 0x7DFF;
+  uint16_t txt = TFT_BLACK;
+
+  if (danger && lastCO2BlinkOn) {
+    bg = MI_ROJO;
+    border = MI_ROJO_CLARO;
+    txt = TFT_WHITE;
+  }
+
+  tft.fillRoundRect(cardX, cardY, cardW, cardH, 5, bg);
+  tft.drawRoundRect(cardX, cardY, cardW, cardH, 5, border);
+
+  char valStr[16];
+  sprintf(valStr, "%.0f ppm", co2);
+  valueSprite.deleteSprite();
+  valueSprite.setColorDepth(8);
+  valueSprite.createSprite(cardW - 8, cardH - 6);
+  valueSprite.fillSprite(bg);
+  valueSprite.setTextColor(txt, bg);
+  valueSprite.setTextSize(1);
+  valueSprite.setTextFont(1);
+  valueSprite.setTextDatum(TL_DATUM);
+  valueSprite.drawString(String("CO2 ") + valStr, 0, 2);
+  valueSprite.pushSprite(cardX + 4, cardY + 3);
+
+  lastCO2 = co2;
 }
 
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
@@ -450,6 +506,7 @@ void setup() {
   menuSprite.createSprite(140, 110);
   valueSprite.createSprite(80, 30);
   drawStaticBackground();
+  co2CardNeedsFullRedraw = true;
 }
 
 void loop() {
@@ -467,6 +524,7 @@ void loop() {
       tft.setCursor(12, 205); tft.print("CO2");
       drawPHScaleStatic();
       lastPhIndicatorValue = -999;
+      co2CardNeedsFullRedraw = true;
       menuVisible = false;
       lastVpd = lastPh = lastTds = -999;
     }
@@ -528,11 +586,8 @@ void loop() {
     lastTds = tdsValue;
   }
 
-  if (fabs(remoteCO2 - lastCO2) > 0.5) {
-    char valStr[16]; sprintf(valStr, "%.0f ppm", remoteCO2);
-    pushValue(10, 220, 90, 18, String(valStr), MI_CYAN, 1, TL_DATUM);
-    lastCO2 = remoteCO2;
-  }
+  drawCO2HudCard(remoteCO2, co2CardNeedsFullRedraw);
+  co2CardNeedsFullRedraw = false;
 
   greenhouseData.vpd = vpd;
   greenhouseData.tds = tdsValue;
@@ -605,6 +660,7 @@ void loop() {
     tft.setCursor(12, 205); tft.print("CO2");
     drawPHScaleStatic();
     lastPhIndicatorValue = -999;
+    co2CardNeedsFullRedraw = true;
     menuVisible = false;
     lastVpd = lastPh = lastTds = -999;
   }
