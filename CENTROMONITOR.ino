@@ -22,6 +22,10 @@
 #define MI_GRIS2    TFT_BLACK
 #define MI_GRIS3    0x0841
 #define MI_PINK     0xF81F
+#define MI_ROJO_OSCURO 0x8000
+#define MI_ROJO_CLARO  0xFBE0
+#define MI_VERDE       0x07E0
+
 
 #define TOUCH_CS    14
 
@@ -95,6 +99,8 @@ bool menuNeedsRedraw = true;
 bool menuVisible = false;
 
 float lastAirTemp = -999, lastAirHum = -999, lastSoil1 = -999, lastSoil2 = -999, lastPh = -999, lastTds = -999, lastVpd = -999;
+int lastPhIndicatorY = -999;
+float lastPhIndicatorValue = -999;
 int lastSecond = -1;
 
 const int BTN_RIEGO_X = 170, BTN_RIEGO_Y = 195, BTN_RIEGO_W = 70, BTN_RIEGO_H = 34;
@@ -201,8 +207,8 @@ void drawStaticBackground() {
   tft.fillScreen(TFT_BLACK);
 
   drawDarkCard(4, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_CYAN);
-  drawDarkCard(109, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_AZUL2);
-  drawDarkCard(214, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_MORADO);
+  drawDarkCard(109, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_ROJO);
+  drawDarkCard(214, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_AZUL2);
 
   drawDarkCard(6, 52, 150, 138, MI_GRIS1, MI_GRIS0, MI_CYAN);
   drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2);
@@ -216,8 +222,8 @@ void drawStaticBackground() {
   tft.setCursor(120, 10); tft.print("TEMP");
   tft.setCursor(226, 10); tft.print("HUM");
 
-  tft.setCursor(18, 58); tft.setTextColor(MI_AZUL2); tft.print("SOIL 1");
-  tft.setCursor(90, 58); tft.print("SOIL 2");
+  tft.setCursor(18, 58); tft.setTextColor(MI_AZUL2); tft.print("10 CM");
+  tft.setCursor(90, 58); tft.print("20 CM");
 
   tft.setTextColor(MI_AZUL2);
   tft.setCursor(172, 62); tft.print("VPD");
@@ -227,6 +233,9 @@ void drawStaticBackground() {
 
   tft.setTextColor(MI_AZUL2);
   tft.setCursor(BTN_RIEGO_X + 18, BTN_RIEGO_Y + 12); tft.print("RIEGO");
+
+  drawPHScaleStatic();
+
   tft.setTextColor(MI_CYAN);
   tft.setCursor(BTN_SET_X + 10, BTN_SET_Y + 12); tft.print("SET SOIL");
 }
@@ -261,8 +270,76 @@ void drawSoilBar(int x, int y, int w, int h, float value, float lastValue, const
   tft.setTextSize(1);
   tft.setCursor(x + 16, y + h + 2); tft.print(label);
 
-  char valStr[8]; sprintf(valStr, "%2.0f%%", value);
-  pushValue(x - 6, y + h + 14, w + 12, 16, String(valStr), MI_AZUL2, 1);
+}
+
+
+uint16_t getVPDColor(float vpd) {
+  if (vpd >= 0.10f && vpd <= 0.39f) return MI_ROJO_CLARO;
+  if (vpd >= 0.40f && vpd <= 0.79f) return MI_VERDE;
+  if (vpd >= 0.81f && vpd <= 1.19f) return MI_AZUL2;
+  if (vpd >= 1.21f && vpd <= 1.60f) return MI_MORADO;
+  if (vpd >= 1.61f && vpd <= 4.80f) return MI_ROJO_OSCURO;
+  return MI_CYAN;
+}
+
+int phToY(float ph) {
+  const int topY = 74;
+  const int barH = 108;
+  float clamped = constrain(ph, 2.0f, 12.0f);
+  float ratio = (clamped - 2.0f) / 10.0f;
+  return topY + barH - 1 - (int)((barH - 1) * ratio);
+}
+
+uint16_t getPHScaleColor(float p) {
+  if (p < 4.0f) return MI_ROJO;
+  if (p < 6.0f) return MI_AMARILLO;
+  if (p < 7.5f) return MI_VERDE;
+  if (p < 9.0f) return MI_CYAN;
+  return MI_MORADO;
+}
+
+void drawPHScaleStatic() {
+  const int scaleX = 268;
+  const int scaleY = 74;
+  const int scaleW = 36;
+  const int barX = scaleX + 18;
+  const int barW = 8;
+  const int barH = 108;
+
+  tft.fillRect(scaleX, scaleY, scaleW, barH, MI_NEGRO);
+
+  for (int p = 2; p <= 12; p++) {
+    int y = phToY((float)p);
+    uint16_t c = getPHScaleColor((float)p);
+    tft.drawFastHLine(barX - 4, y, barW + 8, c);
+    tft.setTextColor(c, MI_NEGRO);
+    tft.setTextSize(1);
+    tft.setCursor(scaleX + 1, y - 3);
+    tft.print(p);
+  }
+
+  tft.drawRoundRect(barX - 1, scaleY - 1, barW + 2, barH + 2, 2, MI_AZUL2);
+}
+
+void drawPHIndicator(float ph) {
+  const int areaX = 208;
+  const int areaY = 74;
+  const int areaW = 58;
+  const int areaH = 108;
+  int y = phToY(ph);
+
+  if (fabs(ph - lastPhIndicatorValue) < 0.01f && abs(y - lastPhIndicatorY) <= 0) return;
+
+  tft.fillRect(areaX, areaY, areaW, areaH, MI_NEGRO);
+  uint16_t c = getPHScaleColor(ph);
+  tft.setTextColor(c, MI_NEGRO);
+  tft.setTextSize(2);
+  tft.setCursor(areaX + 2, y - 8);
+  tft.print("> ");
+  tft.print(ph, 1);
+
+  lastPhIndicatorY = y;
+  lastPhIndicatorValue = ph;
 }
 
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
@@ -382,6 +459,8 @@ void loop() {
       tft.setCursor(172, 102); tft.print("pH");
       tft.setCursor(172, 142); tft.print("PPM");
       tft.setCursor(12, 205); tft.print("CO2");
+      drawPHScaleStatic();
+      lastPhIndicatorValue = -999;
       menuVisible = false;
       lastVpd = lastPh = lastTds = -999;
     }
@@ -418,7 +497,7 @@ void loop() {
   }
   if (fabs(airTemp - lastAirTemp) > 0.09) {
     char valStr[10]; sprintf(valStr, "%2.1fC", airTemp);
-    pushValue(116, 22, 90, 16, String(valStr), MI_AMARILLO, 1);
+    pushValue(116, 22, 90, 16, String(valStr), MI_ROJO, 1);
     lastAirTemp = airTemp;
   }
   if (fabs(airHum - lastAirHum) > 0.09) {
@@ -427,20 +506,17 @@ void loop() {
     lastAirHum = airHum;
   }
 
-  drawSoilBar(22, 70, 48, 105, remoteSoil1, lastSoil1, "S1");
-  drawSoilBar(86, 70, 48, 105, remoteSoil2, lastSoil2, "S2");
+  drawSoilBar(22, 70, 48, 105, remoteSoil1, lastSoil1, "10 CM");
+  drawSoilBar(86, 70, 48, 105, remoteSoil2, lastSoil2, "20 CM");
   lastSoil1 = remoteSoil1; lastSoil2 = remoteSoil2;
 
   if (fabs(vpd - lastVpd) > 0.02) {
     char valStr[10]; sprintf(valStr, "%.2f", vpd);
-    pushValue(168, 78, 140, 18, String(valStr), MI_CYAN, 2);
+    pushValue(168, 78, 100, 18, String(valStr), getVPDColor(vpd), 2);
     lastVpd = vpd;
   }
-  if (fabs(phValue - lastPh) > 0.02) {
-    char valStr[10]; sprintf(valStr, "%.2f", phValue);
-    pushValue(168, 118, 140, 18, String(valStr), MI_PINK, 2);
-    lastPh = phValue;
-  }
+  drawPHIndicator(phValue);
+  if (fabs(phValue - lastPh) > 0.02) lastPh = phValue;
   if (fabs(tdsValue - lastTds) > 3) {
     char valStr[10]; sprintf(valStr, "%.0f", tdsValue);
     pushValue(168, 158, 140, 18, String(valStr), MI_MORADO, 2);
@@ -520,6 +596,8 @@ void loop() {
       tft.setCursor(172, 102); tft.print("pH");
       tft.setCursor(172, 142); tft.print("PPM");
       tft.setCursor(12, 205); tft.print("CO2");
+    drawPHScaleStatic();
+    lastPhIndicatorValue = -999;
     menuVisible = false;
     lastVpd = lastPh = lastTds = -999;
   }
