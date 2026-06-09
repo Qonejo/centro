@@ -514,7 +514,7 @@ void redrawTouchArea(int x, int y) {
     drawPHScaleStatic();
     drawPHIndicator(phValue);
     char vpdStr[10]; sprintf(vpdStr, "%.2f", vpd);
-    pushValue(166, 82, 100, 18, String(vpdStr), getVPDColor(vpd), 2, MC_DATUM);
+    pushValue(166, 86, 100, 18, String(vpdStr), getVPDColor(vpd), 2, MC_DATUM);
     char tdsStr[10]; sprintf(tdsStr, "%.0f", tdsValue);
     pushValue(166, 162, 140, 18, String(tdsStr), MI_MORADO, 2, MC_DATUM);
   } else if (x >= 10 && x <= 142 && y >= 204 && y <= 234) {
@@ -761,12 +761,12 @@ void loop() {
   }
   if (fabs(airTemp - lastAirTemp) > 0.09) {
     char valStr[10]; sprintf(valStr, "%2.1fC", airTemp);
-    pushValue(114, 24, 90, 16, String(valStr), MI_ROJO, 1, MC_DATUM);
+    pushValue(114, 24, 90, 16, String(valStr), MI_ROJO, 2, MC_DATUM);
     lastAirTemp = airTemp;
   }
   if (fabs(airHum - lastAirHum) > 0.09) {
     char valStr[10]; sprintf(valStr, "%2.0f%%", airHum);
-    pushValue(220, 24, 90, 16, String(valStr), MI_CYAN, 1, MC_DATUM);
+    pushValue(220, 24, 90, 16, String(valStr), MI_CYAN, 2, MC_DATUM);
     lastAirHum = airHum;
   }
 
