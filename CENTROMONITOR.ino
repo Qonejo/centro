@@ -114,7 +114,7 @@ float lastAirTemp = -999, lastAirHum = -999, lastSoil1 = -999, lastSoil2 = -999,
 int lastPhIndicatorY = -999;
 float lastPhIndicatorValue = -999;
 bool co2CardNeedsFullRedraw = true;
-int lastSecond = -1;
+unsigned long lastPhaseCardReceiveMs = ~0UL;
 
 const int BTN_RIEGO_X = 170, BTN_RIEGO_Y = 195, BTN_RIEGO_W = 70, BTN_RIEGO_H = 34;
 const int BTN_PUMP_X = 246, BTN_PUMP_Y = 195, BTN_PUMP_W = 70, BTN_PUMP_H = 34;
@@ -126,6 +126,7 @@ const int MENU_X = (320 - MENU_W) / 2, MENU_Y = (240 - MENU_H) / 2;
 void redrawTouchArea(int x, int y);
 void drawPumpButton();
 void drawHumIndicator();
+void drawPhaseCard();
 
 void saveSoilThreshold() {
   preferences.putFloat("soilTh", soilThreshold);
@@ -239,10 +240,35 @@ void drawDarkCard(
 }
 
 
+void drawPhaseCard() {
+  drawDarkCard(4, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_CYAN, MI_AMARILLO);
+  tft.setTextFont(1);
+  tft.setTextSize(1);
+  tft.setTextColor(MI_BLANCO);
+  tft.setCursor(14, 8);
+  tft.print("FASE");
+
+  tft.setTextFont(1);
+  tft.setTextSize(1);
+  tft.setTextColor(MI_CYAN);
+  tft.setCursor(14, 20);
+  tft.print(lastEspNowReceiveMs == 0 ? "--" : (remoteVegetative ? "VEGETACION" : "FLORACION"));
+
+  tft.setTextFont(1);
+  tft.setTextSize(1);
+  tft.setCursor(14, 32);
+  if (lastEspNowReceiveMs == 0) {
+    tft.print("DIA --");
+  } else {
+    tft.print("DIA ");
+    tft.print(remoteVegetative ? remoteDaysVeg : remoteDaysFlower);
+  }
+}
+
 void drawStaticBackground() {
   tft.fillScreen(MI_NEGRO);
 
-  drawDarkCard(4, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_CYAN, MI_AMARILLO);
+  drawPhaseCard();
   drawDarkCard(109, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_ROJO, MI_AMARILLO);
   drawDarkCard(214, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_AZUL, MI_AMARILLO);
 
@@ -252,9 +278,8 @@ void drawStaticBackground() {
   drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, MI_CYAN, MI_AMARILLO);
   drawDarkCard(BTN_PUMP_X, BTN_PUMP_Y, BTN_PUMP_W, BTN_PUMP_H, MI_GRIS2, MI_GRIS0, MI_CYAN, MI_AMARILLO);
 
-  tft.setTextColor(MI_BLANCO);
+  tft.setTextFont(1);
   tft.setTextSize(1);
-  tft.setCursor(14, 10); tft.print("HORA");
   tft.setTextColor(MI_ROJO_CLARO);
   tft.setCursor(120, 10); tft.print("TEMP");
   tft.setTextColor(MI_CYAN);
@@ -262,6 +287,7 @@ void drawStaticBackground() {
   drawHumIndicator();
 
   tft.setTextColor(MI_BLANCO);
+  tft.setTextFont(1);
   tft.setTextSize(1);
   tft.setCursor(SOIL1_BAR_X + (SOIL_BAR_W / 2) - 14, SOIL_BAR_Y - 12); tft.print("10 CM");
   tft.setCursor(SOIL2_BAR_X + (SOIL_BAR_W / 2) - 14, SOIL_BAR_Y - 12); tft.print("20 CM");
@@ -286,6 +312,7 @@ void pushValue(int x, int y, int w, int h, String text, uint16_t color, uint8_t 
   }
   valueSprite.fillSprite(MI_NEGRO);
   valueSprite.setTextColor(color);
+  valueSprite.setTextFont(1);
   valueSprite.setTextSize(size);
   valueSprite.setTextDatum(datum);
   int drawX = 0;
@@ -310,6 +337,7 @@ void drawSoilBar(int x, int y, int w, int h, float value, float lastValue, const
   drawGlowBorder(x, y, w, h, MI_CYAN);
 
   tft.setTextColor(MI_AZUL2);
+  tft.setTextFont(1);
   tft.setTextSize(1);
   int labelX = x + (w / 2) - (strlen(label) * 3);
   tft.setCursor(labelX, y + h + 2); tft.print(label);
@@ -402,8 +430,8 @@ void drawPHIndicator(float ph) {
   tft.fillCircle(dotX, y, 2, MI_ROJO_CLARO);
   tft.drawPixel(dotX, y, MI_ROJO);
   tft.setTextColor(c, MI_NEGRO);
+  tft.setTextFont(1);
   tft.setTextSize(1);
-  tft.setTextFont(2);
   tft.setCursor(phValueX, phValueY);
   tft.print(ph, 1);
 
@@ -460,16 +488,19 @@ void drawCO2HudCard(float co2, bool forceRedraw = false) {
   valueSprite.setTextFont(1);
 
   // CO2 pequeño a la izquierda
+  valueSprite.setTextFont(1);
   valueSprite.setTextSize(1);
   valueSprite.setCursor(2, 10);
   valueSprite.print("CO2");
 
   // número grande
+  valueSprite.setTextFont(1);
   valueSprite.setTextSize(2);
   valueSprite.setCursor(30, 4);
   valueSprite.print(numStr);
 
   // PPM pequeño
+  valueSprite.setTextFont(1);
   valueSprite.setTextSize(1);
   valueSprite.setCursor(86, 10);
   valueSprite.print("PPM");
@@ -484,12 +515,15 @@ void drawCO2HudCard(float co2, bool forceRedraw = false) {
 void drawPumpButton() {
   drawDarkCard(BTN_PUMP_X, BTN_PUMP_Y, BTN_PUMP_W, BTN_PUMP_H, MI_GRIS2, MI_GRIS0, manualPump ? MI_MORADO : MI_CYAN, manualPump ? MI_ROJO : MI_AMARILLO);
   tft.setTextColor(MI_BLANCO);
+  tft.setTextFont(1);
   tft.setTextSize(1);
   tft.setCursor(BTN_PUMP_X + 16, BTN_PUMP_Y + 12);
   tft.print("EC/pH");
 }
 
 void drawHumIndicator() {
+  tft.setTextFont(1);
+  tft.setTextSize(1);
   const int humDotX = 262;
   const int humDotY = 13;
   const int humDotR = 4;
@@ -501,6 +535,7 @@ void redrawTouchArea(int x, int y) {
   if (x >= 6 && x <= 156 && y >= 52 && y <= 190) {
     drawDarkCard(6, 52, 150, 138, MI_GRIS1, MI_GRIS0, MI_CYAN, MI_AMARILLO);
     tft.setTextColor(MI_BLANCO);
+    tft.setTextFont(1);
     tft.setTextSize(1);
     tft.setCursor(SOIL1_BAR_X + (SOIL_BAR_W / 2) - 14, SOIL_BAR_Y - 12); tft.print("10 CM");
     tft.setCursor(SOIL2_BAR_X + (SOIL_BAR_W / 2) - 14, SOIL_BAR_Y - 12); tft.print("20 CM");
@@ -509,6 +544,8 @@ void redrawTouchArea(int x, int y) {
   } else if (x >= 162 && x <= 314 && y >= 52 && y <= 190) {
     drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2, MI_AMARILLO);
     tft.setTextColor(MI_BLANCO);
+    tft.setTextFont(1);
+    tft.setTextSize(1);
     tft.setCursor(172, 62); tft.print("VPD");
     tft.setCursor(172, 142); tft.print("PPM/EC");
     drawPHScaleStatic();
@@ -522,6 +559,7 @@ void redrawTouchArea(int x, int y) {
   } else if (x >= BTN_RIEGO_X && x <= BTN_RIEGO_X + BTN_RIEGO_W && y >= BTN_RIEGO_Y && y <= BTN_RIEGO_Y + BTN_RIEGO_H) {
     drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, manualWatering ? MI_ROJO : MI_CYAN, manualWatering ? MI_ROJO : MI_AMARILLO);
     tft.setTextColor(MI_BLANCO);
+    tft.setTextFont(1);
     tft.setTextSize(1);
     tft.setCursor(BTN_RIEGO_X + 14, BTN_RIEGO_Y + 12); tft.print("RIEGO");
   } else if (x >= BTN_PUMP_X && x <= BTN_PUMP_X + BTN_PUMP_W && y >= BTN_PUMP_Y && y <= BTN_PUMP_Y + BTN_PUMP_H) {
@@ -654,6 +692,8 @@ void loop() {
       tft.fillRect(MENU_X, MENU_Y, MENU_W, MENU_H, MI_NEGRO);
       drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2, MI_AMARILLO);
       tft.setTextColor(MI_BLANCO);
+      tft.setTextFont(1);
+      tft.setTextSize(1);
       tft.setCursor(172, 62); tft.print("VPD");
       tft.setCursor(172, 142); tft.print("PPM/EC");
       drawPHScaleStatic();
@@ -754,10 +794,9 @@ void loop() {
   Serial.print("HUMIDIFIER: ");
   Serial.println(humidifierState ? "ON" : "OFF");
 
-  if (remoteSecond != lastSecond) {
-    char timeStr[10]; sprintf(timeStr, "%02d:%02d:%02d", remoteHour, remoteMinute, remoteSecond);
-    pushValue(14, 24, 86, 16, String(timeStr), MI_CYAN, 1);
-    lastSecond = remoteSecond;
+  if (lastEspNowReceiveMs != lastPhaseCardReceiveMs) {
+    drawPhaseCard();
+    lastPhaseCardReceiveMs = lastEspNowReceiveMs;
   }
   if (fabs(airTemp - lastAirTemp) > 0.09) {
     char valStr[10]; sprintf(valStr, "%2.1fC", airTemp);
@@ -816,6 +855,7 @@ void loop() {
       manualWatering = !manualWatering;
       drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, manualWatering ? MI_ROJO : MI_CYAN, manualWatering ? MI_ROJO : MI_AMARILLO);
       tft.setTextColor(MI_BLANCO);
+      tft.setTextFont(1);
       tft.setTextSize(1);
       tft.setCursor(BTN_RIEGO_X + 14, BTN_RIEGO_Y + 12); tft.print("RIEGO");
     }
@@ -839,7 +879,7 @@ void loop() {
       menuSprite.fillRoundRect(0, 0, MENU_W, MENU_H, 10, MI_GRIS0);
       menuSprite.drawRoundRect(0, 0, MENU_W, MENU_H, 10, MI_CYAN);
       menuSprite.drawRoundRect(1, 1, MENU_W - 2, MENU_H - 2, 10, MI_AZUL2);
-      menuSprite.setTextColor(MI_BLANCO); menuSprite.setTextSize(2);
+      menuSprite.setTextColor(MI_BLANCO); menuSprite.setTextFont(1); menuSprite.setTextSize(2);
       menuSprite.setCursor(48, 14); menuSprite.print("SET SOIL");
       menuSprite.setTextSize(3);
       menuSprite.setCursor(66, 50); menuSprite.print(soilThreshold, 0); menuSprite.print("%");
@@ -855,6 +895,8 @@ void loop() {
     tft.fillRect(MENU_X, MENU_Y, MENU_W, MENU_H, MI_NEGRO);
     drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2, MI_AMARILLO);
     tft.setTextColor(MI_BLANCO);
+    tft.setTextFont(1);
+    tft.setTextSize(1);
     tft.setCursor(172, 62); tft.print("VPD");
     tft.setCursor(172, 142); tft.print("PPM/EC");
     drawPHScaleStatic();
