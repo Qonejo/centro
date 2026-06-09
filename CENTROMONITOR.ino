@@ -5,6 +5,7 @@
 #include <TFT_eSPI.h>
 #include <XPT2046_Touchscreen.h>
 #include <Adafruit_BME280.h>
+#include <Adafruit_AHTX0.h>
 #include <Adafruit_ADS1X15.h>
 #include <RTClib.h>
 #include <WiFi.h>
@@ -42,6 +43,7 @@ TFT_eSprite menuSprite = TFT_eSprite(&tft);
 TFT_eSprite valueSprite = TFT_eSprite(&tft);
 XPT2046_Touchscreen ts(TOUCH_CS);
 Adafruit_BME280 bme;
+Adafruit_AHTX0 aht;
 Adafruit_ADS1115 ads;
 RTC_DS3231 rtc;
 Preferences preferences;
@@ -98,6 +100,9 @@ bool espNowLastSendOk = false;
 bool manualWatering = false;
 bool waterPumpState = false;
 bool manualPump = false;
+bool lastRelayState = false;
+bool lastPumpState = false;
+bool lastHumState = false;
 int lastTouchX = -1, lastTouchY = -1;
 unsigned long lastMenuDebounceMs = 0;
 unsigned long lastHeapLogMs = 0;
@@ -580,13 +585,18 @@ void OnDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, in
 
 void setup() {
   Serial.begin(115200);
-  Wire.begin(21, 22);
+  Wire.begin(21,22);
   tft.init();
   tft.setRotation(1);
   ts.begin();
   ts.setRotation(4);
   ads.begin();
   rtc.begin();
+  if (!aht.begin()) {
+    Serial.println("AHT10 no encontrado");
+  } else {
+    Serial.println("AHT10 OK");
+  }
   if (!bme.begin(0x76)) {
     Serial.println("BME280 no encontrado en 0x76, probando 0x77");
     if (!bme.begin(0x77)) {
@@ -655,8 +665,11 @@ void loop() {
   }
   lastButtonState = currentButton;
 
-  float t = bme.readTemperature();
-  float h = bme.readHumidity();
+  sensors_event_t humidity, temp;
+  aht.getEvent(&humidity, &temp);
+
+  float t = temp.temperature;
+  float h = humidity.relative_humidity;
   if (!isnan(t)) airTemp = t;
   if (!isnan(h)) airHum = h;
 
@@ -667,19 +680,25 @@ void loop() {
   vpd = calculateVPD(airTemp, airHum);
 
   if (manualWatering) {
-    digitalWrite(RELAY_PIN, LOW); relayState = true;
+    relayState = true;
   } else if (soil1 < soilThreshold || soil2 < soilThreshold) {
-    digitalWrite(RELAY_PIN, LOW); relayState = true;
+    relayState = true;
   } else {
-    digitalWrite(RELAY_PIN, HIGH); relayState = false;
+    relayState = false;
+  }
+  if (relayState != lastRelayState) {
+    digitalWrite(RELAY_PIN, relayState ? LOW : HIGH);
+    lastRelayState = relayState;
   }
 
   if (manualPump) {
-    digitalWrite(WATER_PUMP_PIN, LOW);
     waterPumpState = true;
   } else {
-    digitalWrite(WATER_PUMP_PIN, HIGH);
     waterPumpState = false;
+  }
+  if (waterPumpState != lastPumpState) {
+    digitalWrite(WATER_PUMP_PIN, waterPumpState ? LOW : HIGH);
+    lastPumpState = waterPumpState;
   }
 
   String currentStage;
@@ -713,15 +732,14 @@ void loop() {
     }
   }
 
-  bool prevHumidifierState = humidifierState;
   if (vpd > targetVPDMax) {
-    digitalWrite(HUMIDIFIER_PIN, HIGH);
     humidifierState = true;
   } else if (vpd <= (targetVPDMax - vpdHysteresis)) {
-    digitalWrite(HUMIDIFIER_PIN, LOW);
     humidifierState = false;
   }
-  if (humidifierState != prevHumidifierState) {
+  if (humidifierState != lastHumState) {
+    digitalWrite(HUMIDIFIER_PIN, humidifierState ? HIGH : LOW);
+    lastHumState = humidifierState;
     drawHumIndicator();
   }
 
