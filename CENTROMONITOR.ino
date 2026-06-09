@@ -41,6 +41,7 @@
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite menuSprite = TFT_eSprite(&tft);
 TFT_eSprite valueSprite = TFT_eSprite(&tft);
+TFT_eSprite co2Sprite(&tft);
 XPT2046_Touchscreen ts(TOUCH_CS);
 Adafruit_BME280 bme;
 Adafruit_AHTX0 aht;
@@ -106,6 +107,7 @@ bool lastHumState = false;
 int lastTouchX = -1, lastTouchY = -1;
 unsigned long lastMenuDebounceMs = 0;
 unsigned long lastHeapLogMs = 0;
+unsigned long lastDebugMs = 0;
 
 bool menuNeedsRedraw = true;
 bool menuVisible = false;
@@ -304,14 +306,10 @@ void drawStaticBackground() {
 
 }
 
-void pushValue(int x, int y, int w, int h, String text, uint16_t color, uint8_t size, uint8_t datum = TL_DATUM) {
-  if (valueSprite.width() != w || valueSprite.height() != h) {
-    valueSprite.deleteSprite();
-    valueSprite.setColorDepth(8);
-    valueSprite.createSprite(w, h);
-  }
+void pushValue(int x, int y, int w, int h, const char *text, uint16_t color, uint8_t size, uint8_t datum = TL_DATUM) {
+  tft.fillRect(x, y, w, h, MI_NEGRO);
   valueSprite.fillSprite(MI_NEGRO);
-  valueSprite.setTextColor(color);
+  valueSprite.setTextColor(color, MI_NEGRO);
   valueSprite.setTextFont(1);
   valueSprite.setTextSize(size);
   valueSprite.setTextDatum(datum);
@@ -322,7 +320,7 @@ void pushValue(int x, int y, int w, int h, String text, uint16_t color, uint8_t 
   if (datum == ML_DATUM || datum == MC_DATUM || datum == MR_DATUM) drawY = h / 2;
   else if (datum == BL_DATUM || datum == BC_DATUM || datum == BR_DATUM) drawY = h - 1;
   valueSprite.drawString(text, drawX, drawY);
-  valueSprite.pushSprite(x, y);
+  valueSprite.pushSprite(x, y, MI_NEGRO);
 }
 
 void drawSoilBar(int x, int y, int w, int h, float value, float lastValue, const char *label) {
@@ -330,18 +328,20 @@ void drawSoilBar(int x, int y, int w, int h, float value, float lastValue, const
   tft.fillRoundRect(x, y, w, h, 6, MI_NEGRO);
   int fillH = (int)((h - 8) * (value / 100.0));
   int fy = y + h - 4 - fillH;
+  int gradientDivisor = max(1, fillH);
   for (int i = 0; i < fillH; i++) {
-    uint16_t c = blend565(MI_AZUL, MI_CYAN, (uint8_t)((255 * i) / max(1, fillH)));
+    uint16_t c = blend565(MI_AZUL, MI_CYAN, (uint8_t)((255 * i) / gradientDivisor));
     tft.drawFastHLine(x + 4, fy + i, w - 8, c);
   }
   drawGlowBorder(x, y, w, h, MI_CYAN);
 
-  tft.setTextColor(MI_AZUL2);
-  tft.setTextFont(1);
-  tft.setTextSize(1);
-  int labelX = x + (w / 2) - (strlen(label) * 3);
-  tft.setCursor(labelX, y + h + 2); tft.print(label);
-
+  if (label[0] != '\0') {
+    tft.setTextColor(MI_AZUL2);
+    tft.setTextFont(1);
+    tft.setTextSize(1);
+    int labelX = x + (w / 2) - (strlen(label) * 3);
+    tft.setCursor(labelX, y + h + 2); tft.print(label);
+  }
 }
 
 
@@ -477,36 +477,26 @@ void drawCO2HudCard(float co2, bool forceRedraw = false) {
   char numStr[10];
   sprintf(numStr, "%.0f", co2);
 
-  valueSprite.deleteSprite();
-  valueSprite.setColorDepth(8);
-  valueSprite.createSprite(cardW - 8, cardH - 8);
-
-  // IMPORTANTE:
-  valueSprite.fillSprite(bg);
-
-  valueSprite.setTextColor(txt, bg);
-  valueSprite.setTextFont(1);
+  co2Sprite.fillSprite(bg);
+  co2Sprite.setTextColor(txt, bg);
+  co2Sprite.setTextFont(1);
 
   // CO2 pequeño a la izquierda
-  valueSprite.setTextFont(1);
-  valueSprite.setTextSize(1);
-  valueSprite.setCursor(2, 10);
-  valueSprite.print("CO2");
+  co2Sprite.setTextSize(1);
+  co2Sprite.setCursor(2, 10);
+  co2Sprite.print("CO2");
 
   // número grande
-  valueSprite.setTextFont(1);
-  valueSprite.setTextSize(2);
-  valueSprite.setCursor(30, 4);
-  valueSprite.print(numStr);
+  co2Sprite.setTextSize(2);
+  co2Sprite.setCursor(30, 4);
+  co2Sprite.print(numStr);
 
   // PPM pequeño
-  valueSprite.setTextFont(1);
-  valueSprite.setTextSize(1);
-  valueSprite.setCursor(86, 10);
-  valueSprite.print("PPM");
+  co2Sprite.setTextSize(1);
+  co2Sprite.setCursor(86, 10);
+  co2Sprite.print("PPM");
 
-  // IMPORTANTE
-  valueSprite.pushSprite(cardX + 4, cardY + 4);
+  co2Sprite.pushSprite(cardX + 4, cardY + 4);
 
   lastCO2 = co2;
   }
@@ -551,9 +541,9 @@ void redrawTouchArea(int x, int y) {
     drawPHScaleStatic();
     drawPHIndicator(phValue);
     char vpdStr[10]; sprintf(vpdStr, "%.2f", vpd);
-    pushValue(166, 86, 100, 18, String(vpdStr), getVPDColor(vpd), 2, MC_DATUM);
+    pushValue(166, 86, 100, 18, vpdStr, getVPDColor(vpd), 2, MC_DATUM);
     char tdsStr[10]; sprintf(tdsStr, "%.0f", tdsValue);
-    pushValue(166, 162, 140, 18, String(tdsStr), MI_MORADO, 2, MC_DATUM);
+    pushValue(166, 162, 140, 18, tdsStr, MI_MORADO, 2, MC_DATUM);
   } else if (x >= 10 && x <= 142 && y >= 204 && y <= 234) {
     drawCO2HudCard(remoteCO2, true);
   } else if (x >= BTN_RIEGO_X && x <= BTN_RIEGO_X + BTN_RIEGO_W && y >= BTN_RIEGO_Y && y <= BTN_RIEGO_Y + BTN_RIEGO_H) {
@@ -675,9 +665,11 @@ void setup() {
 
   menuSprite.setColorDepth(16);
   valueSprite.setColorDepth(8);
+  co2Sprite.setColorDepth(8);
 
   menuSprite.createSprite(MENU_W, MENU_H);
-  valueSprite.createSprite(80, 30);
+  valueSprite.createSprite(140, 18);
+  co2Sprite.createSprite(124, 22);
   drawStaticBackground();
   co2CardNeedsFullRedraw = true;
 }
@@ -741,7 +733,7 @@ void loop() {
     lastPumpState = waterPumpState;
   }
 
-  String currentStage;
+  const char *currentStage;
   float targetVPDMin = 0.81f;
   float targetVPDMax = 1.19f;
   const float vpdHysteresis = 0.05f;
@@ -783,16 +775,19 @@ void loop() {
     drawHumIndicator();
   }
 
-  Serial.print("ETAPA: ");
-  Serial.println(currentStage);
-  Serial.print("TARGET VPD: ");
-  Serial.print(targetVPDMin);
-  Serial.print(" - ");
-  Serial.println(targetVPDMax);
-  Serial.print("VPD ACTUAL: ");
-  Serial.println(vpd);
-  Serial.print("HUMIDIFIER: ");
-  Serial.println(humidifierState ? "ON" : "OFF");
+  if (millis() - lastDebugMs > 3000) {
+    Serial.print("ETAPA: ");
+    Serial.println(currentStage);
+    Serial.print("TARGET VPD: ");
+    Serial.print(targetVPDMin);
+    Serial.print(" - ");
+    Serial.println(targetVPDMax);
+    Serial.print("VPD ACTUAL: ");
+    Serial.println(vpd);
+    Serial.print("HUMIDIFIER: ");
+    Serial.println(humidifierState ? "ON" : "OFF");
+    lastDebugMs = millis();
+  }
 
   if (lastEspNowReceiveMs != lastPhaseCardReceiveMs) {
     drawPhaseCard();
@@ -800,12 +795,12 @@ void loop() {
   }
   if (fabs(airTemp - lastAirTemp) > 0.09) {
     char valStr[10]; sprintf(valStr, "%2.1fC", airTemp);
-    pushValue(114, 24, 90, 16, String(valStr), MI_ROJO, 2, MC_DATUM);
+    pushValue(114, 24, 90, 16, valStr, MI_ROJO, 2, MC_DATUM);
     lastAirTemp = airTemp;
   }
   if (fabs(airHum - lastAirHum) > 0.09) {
     char valStr[10]; sprintf(valStr, "%2.0f%%", airHum);
-    pushValue(220, 24, 90, 16, String(valStr), MI_CYAN, 2, MC_DATUM);
+    pushValue(220, 24, 90, 16, valStr, MI_CYAN, 2, MC_DATUM);
     lastAirHum = airHum;
   }
 
@@ -815,14 +810,14 @@ void loop() {
 
   if (fabs(vpd - lastVpd) > 0.02) {
     char valStr[10]; sprintf(valStr, "%.2f", vpd);
-    pushValue(166, 82, 100, 18, String(valStr), getVPDColor(vpd), 2, MC_DATUM);
+    pushValue(166, 82, 100, 18, valStr, getVPDColor(vpd), 2, MC_DATUM);
     lastVpd = vpd;
   }
   drawPHIndicator(phValue);
   if (fabs(phValue - lastPh) > 0.02) lastPh = phValue;
   if (fabs(tdsValue - lastTds) > 3) {
     char valStr[10]; sprintf(valStr, "%.0f", tdsValue);
-    pushValue(166, 162, 140, 18, String(valStr), MI_MORADO, 2, MC_DATUM);
+    pushValue(166, 162, 140, 18, valStr, MI_MORADO, 2, MC_DATUM);
     lastTds = tdsValue;
   }
 
