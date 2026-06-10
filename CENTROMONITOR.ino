@@ -117,6 +117,8 @@ unsigned long lastCO2Draw = 0;
 
 // Variables Salvapantallas
 bool screensaverActive = false;
+bool uiNeedsFullRedraw = true;
+bool weedNeedsRedraw = true;
 unsigned long lastTouchTime = 0;
 
 // Credenciales WiFi
@@ -530,12 +532,12 @@ void drawSoilBars() {
 }
 
 void loop() {
-  static unsigned long lastBeat = 0;
+    static uint32_t lastHeartbeat = 0;
 
-   if (millis() - lastBeat > 1000) {
-    Serial.println("LOOP OK");
-    lastBeat = millis();
-}
+    if (millis() - lastHeartbeat > 1000) {
+        Serial.println("UI ALIVE");
+        lastHeartbeat = millis();
+    }
   
     updatePhotoperiod(); 
 
@@ -558,7 +560,10 @@ void loop() {
         lastTouchTime = millis();
         if (screensaverActive) {
             screensaverActive = false;
+            uiNeedsFullRedraw = true;
+            weedNeedsRedraw = true;
             tft.fillScreen(MI_NEGRO);
+            Serial.println("DRAWUI");
             drawUI();
         }
 
@@ -593,7 +598,12 @@ void loop() {
             drawScreensaver();
         } else {
             screensaverActive = false; 
-            if (!showGraph) drawUI(); else drawGraph();
+            if (!showGraph) {
+                Serial.println("DRAWUI");
+                drawUI();
+            } else {
+                drawGraph();
+            }
         }
         
         lastUIRefresh = millis();
@@ -768,7 +778,16 @@ void drawGameboyFrame(int x, int y, int p, int frame[19][21]) {
     uint16_t light = 0x07E0;
 
     auto px = [&](int xx, int yy, uint16_t c) {
-        tft.fillRect(x + xx * p, y + yy * p, p, p, c);
+        int pxX = x + xx * p;
+        int pxY = y + yy * p;
+        int x0 = max(pxX, 0);
+        int y0 = max(pxY, 0);
+        int x1 = min(pxX + p, tft.width());
+        int y1 = min(pxY + p, tft.height());
+
+        if (x0 < x1 && y0 < y1) {
+            tft.fillRect(x0, y0, x1 - x0, y1 - y0, c);
+        }
     };
 
     for (int yy = 0; yy < 19; yy++) {
@@ -799,9 +818,11 @@ void drawWeedagotchi() {
     float mood = (remoteSoil1 + remoteSoil2) * 0.5f;
     int moodBucket = (mood >= 60.0f) ? 0 : (mood >= 40.0f) ? 1 : (mood >= 10.0f) ? 2 : 3;
 
-    if (sway == lastSway && moodBucket == lastMoodBucket) return;
+    if (!weedNeedsRedraw && sway == lastSway && moodBucket == lastMoodBucket) return;
 
-    tft.fillRect(236, 116, 64, 60, MI_NEGRO);
+    Serial.println("WEED");
+    // Huella completa del sprite, incluido el borde de un pixel y ambos extremos del sway.
+    tft.fillRect(234, 115, 71, 63, MI_NEGRO);
 
     if (moodBucket == 0) {
         drawGameboyFrame(238 + sway, 118, 3, happyFace);
@@ -815,49 +836,96 @@ void drawWeedagotchi() {
 
     lastSway = sway;
     lastMoodBucket = moodBucket;
+    weedNeedsRedraw = false;
 }
 
 void drawUI() {
-    // Indicador de estado WiFi (Punto pequeño en la esquina)
-    uint16_t wifiCol = (WiFi.status() == WL_CONNECTED) ? ST77XX_CYAN : ST77XX_RED;
-    tft.fillCircle(5, 5, 3, wifiCol);
+    static int lastWifiStatus = -1;
+    static int lastLightHours = -1;
+    static int lastDarkHours = -1;
+    static int lastDaysVeg = -1;
+    static int lastDaysFlower = -1;
+    static int lastVegetative = -1;
+    static int lastLightMode = -1;
 
-    tft.setTextSize(3); tft.setTextColor(MI_BLANCO, MI_NEGRO);
-    struct tm ti; tft.setCursor(55, 15);
+    int wifiStatus = WiFi.status();
+    if (uiNeedsFullRedraw || wifiStatus != lastWifiStatus) {
+        uint16_t wifiCol = (wifiStatus == WL_CONNECTED) ? ST77XX_CYAN : ST77XX_RED;
+        tft.fillCircle(5, 5, 3, wifiCol);
+        lastWifiStatus = wifiStatus;
+    }
+
+    tft.setTextSize(3);
+    tft.setTextColor(MI_BLANCO, MI_NEGRO);
+    struct tm ti;
+    tft.setCursor(55, 15);
     if (getLocalTime(&ti)) {
         char b[12];
-        strftime(b, 12, "%I:%M %p", &ti);
+        strftime(b, sizeof(b), "%I:%M %p", &ti);
         tft.print(b);
     } else {
         tft.print("--:-- --");
     }
 
-    tft.setTextSize(1); tft.setTextColor(ST77XX_YELLOW, MI_NEGRO);
-    tft.setCursor(135, 45); tft.printf("Ciclo %dh    ", (lightHours + darkHours));
-    printStyled(10, 70, "LUZ: ", String(lightHours) + "h  ", ST77XX_YELLOW, 1);
-    printStyled(170, 70, "OSC: ", String(darkHours) + "h  ", MI_BLANCO, 1);
+    if (uiNeedsFullRedraw || lightHours != lastLightHours || darkHours != lastDarkHours) {
+        tft.setTextSize(1);
+        tft.setTextColor(ST77XX_YELLOW, MI_NEGRO);
+        tft.setCursor(135, 45);
+        tft.printf("Ciclo %dh    ", (lightHours + darkHours));
+        printStyled(10, 70, "LUZ: ", String(lightHours) + "h  ", ST77XX_YELLOW, 1);
+        printStyled(170, 70, "OSC: ", String(darkHours) + "h  ", MI_BLANCO, 1);
+        lastLightHours = lightHours;
+        lastDarkHours = darkHours;
+    }
 
     uint16_t mCol = isVegetative ? ST77XX_GREEN : MI_MORADO;
-    printStyled(10, 100, "MODO: ", (isVegetative ? "VEGETACION" : "FLORACION  "), mCol, 2);
-    printStyled(10, 130, "DIAS VEG:  ", String(daysVeg) + "  ", ST77XX_GREEN, 2);
-    printStyled(10, 160, "DIAS FLOR: ", String(daysFlower) + "  ", MI_MORADO, 2);
+    if (uiNeedsFullRedraw || (int)isVegetative != lastVegetative) {
+        printStyled(10, 100, "MODO: ", (isVegetative ? "VEGETACION" : "FLORACION  "), mCol, 2);
+        lastVegetative = isVegetative;
+    }
+    if (uiNeedsFullRedraw || daysVeg != lastDaysVeg) {
+        printStyled(10, 130, "DIAS VEG:  ", String(daysVeg) + "  ", ST77XX_GREEN, 2);
+        lastDaysVeg = daysVeg;
+    }
+    if (uiNeedsFullRedraw || daysFlower != lastDaysFlower) {
+        printStyled(10, 160, "DIAS FLOR: ", String(daysFlower) + "  ", MI_MORADO, 2);
+        lastDaysFlower = daysFlower;
+    }
 
-    int bx = 30, bw = 260, by = 190;
+    const int bx = 30;
+    const int bw = 260;
+    const int by = 190;
     double phaseDur = inLightMode ? (lightHours * 3600.0) : (darkHours * 3600.0);
     double phaseElap = inLightMode ? photoSecondsElapsed : (photoSecondsElapsed - (lightHours * 3600.0));
-    float perc = (phaseElap / phaseDur) * 100.0;
-    tft.drawRect(bx, by, bw, 15, MI_BLANCO);
-    tft.fillRect(bx + 2, by + 2, (int)((bw - 4) * (perc / 100.0)), 11, mCol);
-    tft.fillRect(bx + 2 + (int)((bw - 4) * (perc / 100.0)), by + 2, (bw - 4) - (int)((bw - 4) * (perc / 100.0)), 11, MI_NEGRO);
+    if (phaseDur <= 0.0) phaseDur = 1.0;
+    if (phaseElap < 0.0) phaseElap = 0.0;
+    if (phaseElap > phaseDur) phaseElap = phaseDur;
+    float perc = constrain((float)((phaseElap / phaseDur) * 100.0), 0.0f, 100.0f);
+    int progressWidth = constrain((int)((bw - 4) * (perc / 100.0f)), 0, bw - 4);
+
+    if (uiNeedsFullRedraw) {
+        tft.drawRect(bx, by, bw, 15, MI_BLANCO);
+    }
+    tft.fillRect(bx + 2, by + 2, progressWidth, 11, mCol);
+    tft.fillRect(bx + 2 + progressWidth, by + 2, (bw - 4) - progressWidth, 11, MI_NEGRO);
+
+    if (uiNeedsFullRedraw || (int)inLightMode != lastLightMode) {
+        tft.setTextSize(1);
+        printStyled(10, 220, "FASE: ", (inLightMode ? "LUZ      " : "OSCURIDAD"), MI_BLANCO, 1, true);
+        lastLightMode = inLightMode;
+    }
 
     tft.setTextSize(1);
-    printStyled(10, 220, "FASE: ", (inLightMode ? "LUZ      " : "OSCURIDAD"), MI_BLANCO, 1, true);
-    tft.setCursor(170, 220); tft.setTextColor(MI_BLANCO, MI_NEGRO);
-    int h = (int)(phaseElap / 3600), m = (int)((long)phaseElap % 3600 / 60), s = (int)((long)phaseElap % 60);
+    tft.setCursor(170, 220);
+    tft.setTextColor(MI_BLANCO, MI_NEGRO);
+    int h = (int)(phaseElap / 3600);
+    int m = (int)((long)phaseElap % 3600 / 60);
+    int s = (int)((long)phaseElap % 60);
     tft.printf("%02d:%02d:%02d ", h, m, s);
     tft.setTextColor(MI_NARANJA, MI_NEGRO);
     tft.printf("%3d%%  ", (int)perc);
 
+    uiNeedsFullRedraw = false;
 }
 
 void drawGraph() {
@@ -867,8 +935,10 @@ void drawGraph() {
     tft.drawLine(30, 40, 30, 200, MI_BLANCO);
     tft.drawLine(30, 200, 300, 200, MI_BLANCO);
     for (int i = 0; i < 23; i++) {
-        int x1 = 30 + (i * 11), y1 = 200 - (history[i] * 1.5);
-        int x2 = 30 + ((i + 1) * 11), y2 = 200 - (history[i+1] * 1.5);
+        float value1 = constrain(history[i], 0.0f, 100.0f);
+        float value2 = constrain(history[i + 1], 0.0f, 100.0f);
+        int x1 = 30 + (i * 11), y1 = 200 - (value1 * 1.5f);
+        int x2 = 30 + ((i + 1) * 11), y2 = 200 - (value2 * 1.5f);
         tft.drawLine(x1, y1, x2, y2, ST77XX_GREEN);
     }
     tft.setTextSize(1); tft.setTextColor(ST77XX_RED);
@@ -876,7 +946,13 @@ void drawGraph() {
 }
 
 void handleAction(int tx, int ty, int step) {
-    if (showGraph) { showGraph = false; tft.fillScreen(MI_NEGRO); return; }
+    if (showGraph) {
+        showGraph = false;
+        uiNeedsFullRedraw = true;
+        weedNeedsRedraw = true;
+        tft.fillScreen(MI_NEGRO);
+        return;
+    }
     if (ty >= 180 && ty <= 210) {
         float ratio = constrain((float)(tx - 30) / 260.0, 0.0, 1.0);
         double phDur = inLightMode ? (lightHours*3600.0) : (darkHours*3600.0);
@@ -908,5 +984,6 @@ void handleAction(int tx, int ty, int step) {
     inLightMode = (photoSecondsElapsed < lightSecs);
 
     saveState();
+    Serial.println("DRAWUI");
     drawUI();
 }
