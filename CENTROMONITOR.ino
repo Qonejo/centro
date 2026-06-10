@@ -563,7 +563,6 @@ void loop() {
             uiNeedsFullRedraw = true;
             weedNeedsRedraw = true;
             tft.fillScreen(MI_NEGRO);
-            Serial.println("DRAWUI");
             drawUI();
         }
 
@@ -599,7 +598,6 @@ void loop() {
         } else {
             screensaverActive = false; 
             if (!showGraph) {
-                Serial.println("DRAWUI");
                 drawUI();
             } else {
                 drawGraph();
@@ -774,20 +772,17 @@ int deadFace[19][21] = {
 };
 
 void drawGameboyFrame(int x, int y, int p, int frame[19][21]) {
+    if (p <= 0 || x < p || y < p) return;
+
+    const int spriteRight = x + (22 * p);
+    const int spriteBottom = y + (20 * p);
+    if (spriteRight > (int)tft.width() || spriteBottom > (int)tft.height()) return;
+
     uint16_t dark = 0x0320;
     uint16_t light = 0x07E0;
 
     auto px = [&](int xx, int yy, uint16_t c) {
-        int pxX = x + xx * p;
-        int pxY = y + yy * p;
-        int x0 = max(pxX, 0);
-        int y0 = max(pxY, 0);
-        int x1 = min(pxX + p, tft.width());
-        int y1 = min(pxY + p, tft.height());
-
-        if (x0 < x1 && y0 < y1) {
-            tft.fillRect(x0, y0, x1 - x0, y1 - y0, c);
-        }
+        tft.fillRect(x + xx * p, y + yy * p, p, p, c);
     };
 
     for (int yy = 0; yy < 19; yy++) {
@@ -820,7 +815,6 @@ void drawWeedagotchi() {
 
     if (!weedNeedsRedraw && sway == lastSway && moodBucket == lastMoodBucket) return;
 
-    Serial.println("WEED");
     // Huella completa del sprite, incluido el borde de un pixel y ambos extremos del sway.
     tft.fillRect(234, 115, 71, 63, MI_NEGRO);
 
@@ -906,8 +900,13 @@ void drawUI() {
     if (uiNeedsFullRedraw) {
         tft.drawRect(bx, by, bw, 15, MI_BLANCO);
     }
-    tft.fillRect(bx + 2, by + 2, progressWidth, 11, mCol);
-    tft.fillRect(bx + 2 + progressWidth, by + 2, (bw - 4) - progressWidth, 11, MI_NEGRO);
+    if (progressWidth > 0) {
+        tft.fillRect(bx + 2, by + 2, progressWidth, 11, mCol);
+    }
+    const int remainingWidth = (bw - 4) - progressWidth;
+    if (remainingWidth > 0) {
+        tft.fillRect(bx + 2 + progressWidth, by + 2, remainingWidth, 11, MI_NEGRO);
+    }
 
     if (uiNeedsFullRedraw || (int)inLightMode != lastLightMode) {
         tft.setTextSize(1);
@@ -984,6 +983,5 @@ void handleAction(int tx, int ty, int step) {
     inLightMode = (photoSecondsElapsed < lightSecs);
 
     saveState();
-    Serial.println("DRAWUI");
     drawUI();
 }
