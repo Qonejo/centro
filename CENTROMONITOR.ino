@@ -121,6 +121,38 @@ bool uiNeedsFullRedraw = true;
 bool weedNeedsRedraw = true;
 unsigned long lastTouchTime = 0;
 
+
+// ===== TIEMPO / WATCHDOG =====
+// getLocalTime() usa 5000 ms por defecto. Sin WiFi/NTP activo puede
+// bloquear el loop lo suficiente para disparar el TG1 watchdog.
+static bool getLocalTimeNoBlock(struct tm *ti) {
+    return getLocalTime(ti, 0);
+}
+
+static bool printStaMac() {
+    uint8_t staMac[6] = {0};
+    esp_err_t err = esp_wifi_get_mac(WIFI_IF_STA, staMac);
+
+    if (err != ESP_OK ||
+        (staMac[0] == 0 && staMac[1] == 0 && staMac[2] == 0 &&
+         staMac[3] == 0 && staMac[4] == 0 && staMac[5] == 0)) {
+        Serial.println("MAC EMISOR: INVALIDA");
+        return false;
+    }
+
+    Serial.printf(
+        "MAC EMISOR: %02X:%02X:%02X:%02X:%02X:%02X\n",
+        staMac[0],
+        staMac[1],
+        staMac[2],
+        staMac[3],
+        staMac[4],
+        staMac[5]
+    );
+
+    return true;
+}
+
 // Credenciales WiFi
 const char* ssid = "IZZI-367E";
 const char* password = "ehwa3pX7btcw";
@@ -328,8 +360,9 @@ void setup() {
     // ================= WIFI STA ==========================
     // =====================================================
     WiFi.mode(WIFI_STA);
-    Serial.print("MAC EMISOR: ");
-    Serial.println(WiFi.macAddress());
+    WiFi.disconnect(false, false);
+    delay(100);
+    printStaMac();
 
     // WiFi.begin(ssid, password);
     // while (WiFi.status() != WL_CONNECTED) {
@@ -417,7 +450,7 @@ void drawScreensaver() {
     if (millis() - lastMove > 30000 || screensaverActive == false) {
         tft.fillScreen(MI_NEGRO);
         struct tm ti;
-        if (getLocalTime(&ti)) {
+        if (getLocalTimeNoBlock(&ti)) {
             char b[12];
             strftime(b, 12, "%I:%M %p", &ti);
             tft.setTextSize(2);
@@ -552,7 +585,7 @@ void loop() {
 
     struct tm ti;
     bool isNight = false;
-    if (getLocalTime(&ti)) {
+    if (getLocalTimeNoBlock(&ti)) {
         if (ti.tm_hour >= 0 && ti.tm_hour < 8) isNight = true;
     }
 
@@ -609,7 +642,7 @@ void loop() {
         // ================= ESP NOW SEND ======================
         // =====================================================
         struct tm ti2;
-        if (getLocalTime(&ti2)) {
+        if (getLocalTimeNoBlock(&ti2)) {
             growData.hour = ti2.tm_hour;
             growData.minute = ti2.tm_min;
             growData.second = ti2.tm_sec;
@@ -853,7 +886,7 @@ void drawUI() {
     tft.setTextColor(MI_BLANCO, MI_NEGRO);
     struct tm ti;
     tft.setCursor(55, 15);
-    if (getLocalTime(&ti)) {
+    if (getLocalTimeNoBlock(&ti)) {
         char b[12];
         strftime(b, sizeof(b), "%I:%M %p", &ti);
         tft.print(b);
