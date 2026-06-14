@@ -1,1020 +1,880 @@
-#include <Adafruit_GFX.h>    
-#include <Adafruit_ST7789.h> 
-#include <XPT2046_Touchscreen.h>
+#include <Wire.h>
 #include <SPI.h>
-#include <SD.h>
-#include <WiFi.h>
-#include <esp_now.h>
-#include <esp_wifi.h>
-#include <time.h>
 #include <math.h>
 
-// ===== PINES ESP32-S3 SUPERMINI == direccion mac 94:A9:90:37:7A:EC ===
-#define TFT_CS 10
-#define TFT_RST 9
-#define TFT_DC 8
-#define TOUCH_CS 7
-#define SD_CS 5
-#define RELAY_PIN 4
+#include <TFT_eSPI.h>
+#include <XPT2046_Touchscreen.h>
+#include <Adafruit_BME280.h>
+#include <Adafruit_AHTX0.h>
+#include <Adafruit_ADS1X15.h>
+#include <RTClib.h>
+#include <WiFi.h>
+#include <esp_now.h>
+#include <Preferences.h>
 
-#define MI_NEGRO 0x0000
-#define MI_BLANCO 0xFFFF
-#define MI_MORADO 0xFFE0
-#define MI_NARANJA 0xFD20
+#define MI_NEGRO    0x0000
+#define MI_BLANCO   0xFFFF
+#define MI_MORADO   0xA01F
+#define MI_CYAN     0xFFE0
+#define MI_ROJO     0x001F
+#define MI_AZUL     0xF800
+#define MI_AZUL2    0xF800
+#define MI_AMARILLO 0x07FF
+#define MI_GRIS0    0x0000
+#define MI_GRIS1    MI_NEGRO
+#define MI_GRIS2    MI_NEGRO
+#define MI_GRIS3    0x0841
+#define MI_PINK     0xF81F
+#define MI_ROJO_OSCURO 0x8000
+#define MI_ROJO_CLARO  0xFBE0
+#define MI_VERDE       0x07E0
 
-Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
+
+#define TOUCH_CS    14
+
+#define RELAY_PIN       25
+#define HUMIDIFIER_PIN  26
+#define WATER_PUMP_PIN  17
+#define TDS_PIN         34
+#define MENU_BUTTON_PIN 33
+
+TFT_eSPI tft = TFT_eSPI();
+TFT_eSprite menuSprite = TFT_eSprite(&tft);
+TFT_eSprite valueSprite = TFT_eSprite(&tft);
 XPT2046_Touchscreen ts(TOUCH_CS);
+Adafruit_BME280 bme;
+Adafruit_AHTX0 aht;
+Adafruit_ADS1115 ads;
+RTC_DS3231 rtc;
+Preferences preferences;
 
-// ===== VARIABLES CULTIVO =====
-int lightHours = 12, darkHours = 12, daysVeg = 0, daysFlower = 0;
-bool isVegetative = true, inLightMode = true, showGraph = false;
-double photoSecondsElapsed = 0;
-float history[24]; 
-
-// =====================================================
-// ================= ESP NOW ============================
-// =====================================================
 typedef struct struct_message {
-    int lightHours;
-    int darkHours;
-    int daysVeg;
-    int daysFlower;
-    bool isVegetative;
-    bool inLightMode;
-    float progressPercent;
-    int hour;
-    int minute;
-    int second;
-    float vpd;
+  int lightHours;
+  int darkHours;
+  int daysVeg;
+  int daysFlower;
+  bool isVegetative;
+  bool inLightMode;
+  float progressPercent;
+  int hour;
+  int minute;
+  int second;
 } struct_message;
 
-struct_message growData;
-
 typedef struct greenhouse_message {
-    float vpd;
-    float tds;
-    float ph;
-    float soil1;
-    float soil2;
-    float co2;
-    float airTemp;
-    float airHum;
-    bool relayState;
+  float vpd;
+  float tds;
+  float ph;
+  float soil1;
+  float soil2;
+  float airTemp;
+  float airHum;
+  bool relayState;
 } greenhouse_message;
 
-greenhouse_message greenhouseData;
-
 typedef struct soil_message {
-
-    float soil1;
-    float soil2;
-    float co2;
-
+  float soil1;
+  float soil2;
+  float co2;
 } soil_message;
 
-// =====================================================
-// ================= MAC RECEPTOR ======================
-// =====================================================
-uint8_t macInvernadero[] = {
-    0x94, 0xA9, 0x90,
-    0x37, 0x7A, 0xEC
-};
-uint8_t macCalendarioESP[] = {
-    0xE0, 0x72, 0xA1,
-    0xE7, 0x7C, 0x8C
-};
-uint8_t macSoilNode[] = {
-    0xAC, 0xA7, 0x04,
-    0xB8, 0x0C, 0xAC
-};
+greenhouse_message greenhouseData;
+uint8_t macFotoperiodo[] = {0x00, 0x4B, 0x12, 0x3D, 0x19, 0xFC};
+uint8_t macSoilNode[] = {0xAC, 0xA7, 0x04, 0xB8, 0x0C, 0xAC};
 
-unsigned long lastMillis, lastUIRefresh, lastSave, lastHistoryUpdate;
-unsigned long lastWifiCheck = 0; // Para el refresco de WiFi
-uint8_t wifiChannel = 1;
-unsigned long touchStartTime = 0;
-unsigned long lastEspNowSend = 0;
-unsigned long lastAutoSave = 0;
-float remoteVPD = 0;
-float remoteTDS = 0;
-float remotePH = 0;
-float remoteSoil1 = 0;
-float remoteSoil2 = 0;
-float remoteCO2 = 0;
-float remoteTemp = 0;
-float remoteHum = 0;
-bool remoteRelay = false;
-unsigned long lastEspNowReceiveMs = 0;
-void drawWeedagotchi();
-float lastDisplayedVPD = -999.0;
-float lastDisplayedTDS = -999.0;
-float lastDisplayedSoil1 = -999.0;
-float lastDisplayedSoil2 = -999.0;
-float lastDisplayedCO2 = -999.0;
-unsigned long lastVpdDraw = 0;
-unsigned long lastTdsDraw = 0;
-unsigned long lastSoilDraw = 0;
-unsigned long lastCO2Draw = 0;
+float airTemp = 0, airHum = 0, soil1 = 0, soil2 = 0, phValue = 0, tdsValue = 0, vpd = 0;
+float remoteSoil1 = 0, remoteSoil2 = 0;
+float remoteCO2 = 0, lastCO2 = -999;
+bool lastCO2BlinkOn = false;
+unsigned long lastCO2BlinkToggleMs = 0;
+int remoteLightHours = 0, remoteDarkHours = 0, remoteDaysVeg = 0, remoteDaysFlower = 0;
+bool remoteVegetative = true, remoteLightMode = true;
+float remoteProgress = 0;
+int remoteHour = 0, remoteMinute = 0, remoteSecond = 0;
+unsigned long lastEspNowReceiveMs = 0, lastEspNowSendMs = 0, lastTouchRead = 0, touchDotTime = 0;
 
-// Variables Salvapantallas
-bool screensaverActive = false;
-bool uiNeedsFullRedraw = true;
-bool weedNeedsRedraw = true;
-unsigned long lastTouchTime = 0;
+float soilThreshold = 40.0;
+float calibrationFactorTDS = 1.22;
+bool relayState = false, humidifierState = false, inMenu = false, lastButtonState = false;
+bool espNowLastSendOk = false;
+bool manualWatering = false;
+bool waterPumpState = false;
+bool manualPump = false;
+bool lastRelayState = false;
+bool lastPumpState = false;
+bool lastHumState = false;
+int lastTouchX = -1, lastTouchY = -1;
+unsigned long lastMenuDebounceMs = 0;
+unsigned long lastHeapLogMs = 0;
 
+bool menuNeedsRedraw = true;
+bool menuVisible = false;
 
-// ===== TIEMPO / WATCHDOG =====
-// getLocalTime() usa 5000 ms por defecto. Sin WiFi/NTP activo puede
-// bloquear el loop lo suficiente para disparar el TG1 watchdog.
-static bool getLocalTimeNoBlock(struct tm *ti) {
-    return getLocalTime(ti, 0);
+float lastAirTemp = -999, lastAirHum = -999, lastSoil1 = -999, lastSoil2 = -999, lastPh = -999, lastTds = -999, lastVpd = -999;
+int lastPhIndicatorY = -999;
+float lastPhIndicatorValue = -999;
+bool co2CardNeedsFullRedraw = true;
+int lastSecond = -1;
+
+const int BTN_RIEGO_X = 170, BTN_RIEGO_Y = 195, BTN_RIEGO_W = 70, BTN_RIEGO_H = 34;
+const int BTN_PUMP_X = 246, BTN_PUMP_Y = 195, BTN_PUMP_W = 70, BTN_PUMP_H = 34;
+const int PH_SCALE_X = 276, PH_SCALE_Y = 72, PH_SCALE_W = 26, PH_BAR_H = 93, PH_BAR_X = PH_SCALE_X + 12, PH_BAR_W = 6;
+const int SOIL_BAR_Y = 70, SOIL_BAR_W = 48, SOIL_BAR_H = 105;
+const int SOIL1_BAR_X = 22, SOIL2_BAR_X = 86;
+const int MENU_W = 190, MENU_H = 140;
+const int MENU_X = (320 - MENU_W) / 2, MENU_Y = (240 - MENU_H) / 2;
+void redrawTouchArea(int x, int y);
+void drawPumpButton();
+void drawHumIndicator();
+
+void saveSoilThreshold() {
+  preferences.putFloat("soilTh", soilThreshold);
 }
 
-static bool printStaMac() {
-    uint8_t staMac[6] = {0};
-    esp_err_t err = esp_wifi_get_mac(WIFI_IF_STA, staMac);
-
-    if (err != ESP_OK ||
-        (staMac[0] == 0 && staMac[1] == 0 && staMac[2] == 0 &&
-         staMac[3] == 0 && staMac[4] == 0 && staMac[5] == 0)) {
-        Serial.println("MAC EMISOR: INVALIDA");
-        return false;
-    }
-
-    Serial.printf(
-        "MAC EMISOR: %02X:%02X:%02X:%02X:%02X:%02X\n",
-        staMac[0],
-        staMac[1],
-        staMac[2],
-        staMac[3],
-        staMac[4],
-        staMac[5]
-    );
-
-    return true;
+float readTDS() {
+  long total = 0;
+  for (int i = 0; i < 20; i++) total += analogRead(TDS_PIN);
+  float avg = total / 20.0;
+  float voltage = avg * (3.3 / 4095.0);
+  float compensationCoefficient = 1.0 + 0.02 * (airTemp - 25.0);
+  float compensationVoltage = voltage / compensationCoefficient;
+  float rawTds = (133.42 * compensationVoltage * compensationVoltage * compensationVoltage - 255.86 * compensationVoltage * compensationVoltage + 857.39 * compensationVoltage) * 0.5;
+  return rawTds * calibrationFactorTDS;
 }
 
-// Credenciales WiFi
-const char* ssid = "IZZI-367E";
-const char* password = "ehwa3pX7btcw";
-
-// ===== PERSISTENCIA SD =====
-// =====================================================
-// ================= ESP NOW CALLBACK ==================
-// =====================================================
-void OnDataSent(
-    const wifi_tx_info_t *info,
-    esp_now_send_status_t status) {
-    Serial.print("ESP NOW: ");
-    if (status == ESP_NOW_SEND_SUCCESS)
-        Serial.println("OK");
-    else
-        Serial.println("ERROR");
+float readPH() {
+  int16_t adc = ads.readADC_SingleEnded(2);
+  float voltage = adc * 0.1875 / 1000.0;
+  return 7 + ((2.5 - voltage) / 0.18);
 }
 
-void OnDataRecv(
-    const esp_now_recv_info_t *info,
-    const uint8_t *incomingData,
-    int len
+float readSoilPercent(int channel) {
+  int16_t adc = ads.readADC_SingleEnded(channel);
+  int dryValue = 17000, wetValue = 8000;
+  float percent = map(adc, dryValue, wetValue, 0, 100);
+  return constrain(percent, 0, 100);
+}
+
+float calculateVPD(float temp, float hum) {
+  float SVP = 0.6108 * exp((17.27 * temp) / (temp + 237.3));
+  float AVP = SVP * (hum / 100.0);
+  return SVP - AVP;
+}
+
+bool readTouchScreen(int &tx, int &ty) {
+  if (!ts.touched()) return false;
+  if (millis() - lastTouchRead < 60) return false;
+  TS_Point p = ts.getPoint();
+  tx = constrain(map(p.x, 200, 3800, 319, 0), 0, 319);
+  ty = constrain(map(p.y, 200, 3800, 239, 0), 0, 239);
+  lastTouchRead = millis();
+  return true;
+}
+
+uint16_t blend565(uint16_t c1, uint16_t c2, uint8_t mix) {
+  uint8_t r1 = (c1 >> 11) & 0x1F, g1 = (c1 >> 5) & 0x3F, b1 = c1 & 0x1F;
+  uint8_t r2 = (c2 >> 11) & 0x1F, g2 = (c2 >> 5) & 0x3F, b2 = c2 & 0x1F;
+  uint8_t r = (r1 * (255 - mix) + r2 * mix) / 255;
+  uint8_t g = (g1 * (255 - mix) + g2 * mix) / 255;
+  uint8_t b = (b1 * (255 - mix) + b2 * mix) / 255;
+  return (r << 11) | (g << 5) | b;
+}
+
+void drawGlowBorder(int x, int y, int w, int h, uint16_t glowColor) {
+  tft.drawRoundRect(x, y, w, h, 8, blend565(glowColor, MI_NEGRO, 70));
+  tft.drawRoundRect(x + 1, y + 1, w - 2, h - 2, 8, blend565(glowColor, MI_NEGRO, 130));
+  tft.drawRoundRect(x + 2, y + 2, w - 4, h - 4, 7, glowColor);
+}
+
+void drawDarkCard(
+  int x,
+  int y,
+  int w,
+  int h,
+  uint16_t top,
+  uint16_t bottom,
+  uint16_t glow,
+  uint16_t borderColor
 ) {
-    Serial.print("FROM: ");
 
-    char macStr[18];
+  // fondo negro profundo
+  tft.fillRoundRect(
+    x,
+    y,
+    w,
+    h,
+    8,
+    MI_NEGRO
+  );
 
-    snprintf(
-        macStr,
-        sizeof(macStr),
-        "%02X:%02X:%02X:%02X:%02X:%02X",
-        info->src_addr[0],
-        info->src_addr[1],
-        info->src_addr[2],
-        info->src_addr[3],
-        info->src_addr[4],
-        info->src_addr[5]
-    );
+  // sombra interior MUY tenue
+  tft.drawRoundRect(
+    x + 1,
+    y + 1,
+    w - 2,
+    h - 2,
+    8,
+    0x0841
+  );
 
-    Serial.println(macStr);
+  // detalle interno del color del card
+  tft.drawRoundRect(
+    x + 2,
+    y + 2,
+    w - 4,
+    h - 4,
+    7,
+    blend565(glow, MI_NEGRO, 110)
+  );
 
-    //=====================================================
-    // DATOS DEL SENSOR S1 S2 CO2
-    //=====================================================
-    if (len == sizeof(soil_message)) {
-
-        soil_message incomingSoil;
-
-        memcpy(
-            &incomingSoil,
-            incomingData,
-            sizeof(incomingSoil)
-        );
-
-        remoteSoil1 = constrain(
-            incomingSoil.soil1,
-            0.0f,
-            100.0f
-        );
-
-        remoteSoil2 = constrain(
-            incomingSoil.soil2,
-            0.0f,
-            100.0f
-        );
-
-        remoteCO2 = max(
-            incomingSoil.co2,
-            0.0f
-        );
-
-        lastEspNowReceiveMs = millis();
-
-        return;
-    }
-
-    if (len == sizeof(greenhouse_message)) {
-        memcpy(&greenhouseData, incomingData, sizeof(greenhouseData));
-        remoteVPD = greenhouseData.vpd;
-        remoteTDS = greenhouseData.tds;
-        remotePH = greenhouseData.ph;
-        remoteSoil1 = greenhouseData.soil1;
-        remoteSoil2 = greenhouseData.soil2;
-        remoteCO2 = greenhouseData.co2;
-        remoteTemp = greenhouseData.airTemp;
-        remoteHum = greenhouseData.airHum;
-        remoteRelay = greenhouseData.relayState;
-        lastEspNowReceiveMs = millis();
-        Serial.println("[ESP-NOW RX greenhouse_message OK]");
-        Serial.print("VPD: ");
-        Serial.println(remoteVPD);
-        Serial.print("TDS: ");
-        Serial.println(remoteTDS);
-        Serial.print("CO2: ");
-        Serial.println(remoteCO2);
-        Serial.print("TEMP: ");
-        Serial.println(remoteTemp);
-        Serial.print("HUM: ");
-        Serial.println(remoteHum);
-        return;
-    }
-
-    if (len == sizeof(struct_message)) {
-        struct_message incomingMessage;
-        memcpy(&incomingMessage, incomingData, sizeof(incomingMessage));
-        Serial.println("[ESP-NOW RX struct_message OK]");
-        return;
-    }
-
-    Serial.println("[ESP-NOW RX] Unknown payload size");
+  // glow exterior tenue
+  tft.drawRoundRect(
+    x,
+    y,
+    w,
+    h,
+    8,
+    borderColor
+  );
 }
 
-void saveHistory() {
-    SD.remove("/history.txt");
-    File file = SD.open("/history.txt", FILE_WRITE);
-    if (!file) return;
-    for (int i = 0; i < 24; i++) {
-        if (i > 0) file.print(',');
-        file.printf("%.3f", history[i]);
-    }
-    file.close();
-    Serial.println("[SD] Historial guardado");
+
+void drawStaticBackground() {
+  tft.fillScreen(MI_NEGRO);
+
+  drawDarkCard(4, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_CYAN, MI_AMARILLO);
+  drawDarkCard(109, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_ROJO, MI_AMARILLO);
+  drawDarkCard(214, 4, 102, 42, MI_GRIS0, MI_NEGRO, MI_AZUL, MI_AMARILLO);
+
+  drawDarkCard(6, 52, 150, 138, MI_GRIS1, MI_GRIS0, MI_CYAN, MI_AMARILLO);
+  drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2, MI_AMARILLO);
+
+  drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, MI_CYAN, MI_AMARILLO);
+  drawDarkCard(BTN_PUMP_X, BTN_PUMP_Y, BTN_PUMP_W, BTN_PUMP_H, MI_GRIS2, MI_GRIS0, MI_CYAN, MI_AMARILLO);
+
+  tft.setTextColor(MI_BLANCO);
+  tft.setTextSize(1);
+  tft.setCursor(14, 10); tft.print("HORA");
+  tft.setTextColor(MI_ROJO_CLARO);
+  tft.setCursor(120, 10); tft.print("TEMP");
+  tft.setTextColor(MI_CYAN);
+  tft.setCursor(226, 10); tft.print("HUM");
+  drawHumIndicator();
+
+  tft.setTextColor(MI_BLANCO);
+  tft.setTextSize(1);
+  tft.setCursor(SOIL1_BAR_X + (SOIL_BAR_W / 2) - 14, SOIL_BAR_Y - 12); tft.print("10 CM");
+  tft.setCursor(SOIL2_BAR_X + (SOIL_BAR_W / 2) - 14, SOIL_BAR_Y - 12); tft.print("20 CM");
+
+  tft.setTextColor(MI_BLANCO);
+  tft.setCursor(172, 62); tft.print("VPD");
+  tft.setCursor(172, 142); tft.print("PPM/EC");
+  tft.setTextColor(MI_BLANCO);
+  tft.setCursor(BTN_RIEGO_X + 14, BTN_RIEGO_Y + 12); tft.print("RIEGO");
+
+  drawPHScaleStatic();
+
+  drawPumpButton();
+
 }
 
-void loadHistory() {
-    for (int i = 0; i < 24; i++) history[i] = 0.0f;
-    if (!SD.exists("/history.txt")) {
-        saveHistory();
-        return;
-    }
-    File file = SD.open("/history.txt");
-    if (!file) return;
-    String data = file.readString();
-    file.close();
-
-    int from = 0;
-    for (int i = 0; i < 24; i++) {
-        int comma = data.indexOf(',', from);
-        String token = (comma >= 0) ? data.substring(from, comma) : data.substring(from);
-        history[i] = token.toFloat();
-        if (comma < 0) break;
-        from = comma + 1;
-    }
-    Serial.println("[SD] Historial cargado");
+void pushValue(int x, int y, int w, int h, String text, uint16_t color, uint8_t size, uint8_t datum = TL_DATUM) {
+  if (valueSprite.width() != w || valueSprite.height() != h) {
+    valueSprite.deleteSprite();
+    valueSprite.setColorDepth(8);
+    valueSprite.createSprite(w, h);
+  }
+  valueSprite.fillSprite(MI_NEGRO);
+  valueSprite.setTextColor(color);
+  valueSprite.setTextSize(size);
+  valueSprite.setTextDatum(datum);
+  int drawX = 0;
+  int drawY = 0;
+  if (datum == TC_DATUM || datum == MC_DATUM || datum == BC_DATUM) drawX = w / 2;
+  else if (datum == TR_DATUM || datum == MR_DATUM || datum == BR_DATUM) drawX = w - 1;
+  if (datum == ML_DATUM || datum == MC_DATUM || datum == MR_DATUM) drawY = h / 2;
+  else if (datum == BL_DATUM || datum == BC_DATUM || datum == BR_DATUM) drawY = h - 1;
+  valueSprite.drawString(text, drawX, drawY);
+  valueSprite.pushSprite(x, y);
 }
 
-void saveState() {
-    SD.remove("/estado.txt");
-    File file = SD.open("/estado.txt", FILE_WRITE);
-    if (file) {
-        file.printf("%d,%d,%d,%d,%d,%.2f,%.2f,%d", lightHours, darkHours, (isVegetative ? 1 : 0), daysVeg, daysFlower, photoSecondsElapsed, remoteVPD, (inLightMode ? 1 : 0));
-        file.close();
-        saveHistory();
-        Serial.println("[SD] Estado guardado");
-    }
+void drawSoilBar(int x, int y, int w, int h, float value, float lastValue, const char *label) {
+  if (fabs(value - lastValue) < 0.5) return;
+  tft.fillRoundRect(x, y, w, h, 6, MI_NEGRO);
+  int fillH = (int)((h - 8) * (value / 100.0));
+  int fy = y + h - 4 - fillH;
+  for (int i = 0; i < fillH; i++) {
+    uint16_t c = blend565(MI_AZUL, MI_CYAN, (uint8_t)((255 * i) / max(1, fillH)));
+    tft.drawFastHLine(x + 4, fy + i, w - 8, c);
+  }
+  drawGlowBorder(x, y, w, h, MI_CYAN);
+
+  tft.setTextColor(MI_AZUL2);
+  tft.setTextSize(1);
+  int labelX = x + (w / 2) - (strlen(label) * 3);
+  tft.setCursor(labelX, y + h + 2); tft.print(label);
+
 }
 
-void loadState() {
-    if (!SD.exists("/estado.txt")) {
-        saveState();
-        return;
-    }
-    File file = SD.open("/estado.txt");
-    if (file) {
-        String data = file.readString();
-        int v2, lightMode = 1;
-        float savedVPD = 0.0f;
-        int parsed = sscanf(data.c_str(), "%d,%d,%d,%d,%d,%lf,%f,%d", &lightHours, &darkHours, &v2, &daysVeg, &daysFlower, &photoSecondsElapsed, &savedVPD, &lightMode);
-        if (parsed >= 6) {
-            isVegetative = (v2 == 1);
-            if (parsed >= 7) remoteVPD = savedVPD;
-            if (parsed >= 8) inLightMode = (lightMode == 1);
-        }
-        file.close();
-        Serial.println("[SD] Estado cargado");
-    }
+
+uint16_t getVPDColor(float vpd) {
+  if (vpd >= 0.10f && vpd <= 0.39f) return MI_ROJO_CLARO;
+  if (vpd >= 0.40f && vpd <= 0.79f) return MI_VERDE;
+  if (vpd >= 0.81f && vpd <= 1.19f) return MI_AZUL2;
+  if (vpd >= 1.21f && vpd <= 1.60f) return MI_MORADO;
+  if (vpd >= 1.61f && vpd <= 4.80f) return MI_ROJO_OSCURO;
+  return MI_CYAN;
 }
 
-void handleAutoSave() {
-    static int prevLightHours = lightHours;
-    static int prevDarkHours = darkHours;
-    static bool prevVegetative = isVegetative;
-    static bool prevLightMode = inLightMode;
-    static float prevHistoryLast = history[23];
+int phToY(float ph) {
+  float clamped = constrain(ph, 3.0f, 11.0f);
+  float ratio = (11.0f - clamped) / 8.0f;
+  return PH_SCALE_Y + (int)((PH_BAR_H - 1) * ratio);
+}
 
-    bool configChanged = (lightHours != prevLightHours) || (darkHours != prevDarkHours) || (isVegetative != prevVegetative);
-    bool phaseChanged = (inLightMode != prevLightMode);
-    bool historyChanged = fabs(history[23] - prevHistoryLast) > 0.001f;
-    bool timeElapsed = millis() - lastAutoSave > 60000;
+uint16_t getPHScaleColor(float p) {
+  if (p < 4.0f) return MI_ROJO;
+  if (p < 6.0f) return MI_AMARILLO;
+  if (p < 7.5f) return MI_VERDE;
+  if (p < 9.0f) return MI_CYAN;
+  return MI_MORADO;
+}
 
-    if (configChanged || phaseChanged || historyChanged || timeElapsed) {
-        saveState();
-        lastAutoSave = millis();
-        prevLightHours = lightHours;
-        prevDarkHours = darkHours;
-        prevVegetative = isVegetative;
-        prevLightMode = inLightMode;
-        prevHistoryLast = history[23];
-    }
+void drawPHScaleStatic() {
+  tft.fillRect(PH_SCALE_X, PH_SCALE_Y, PH_SCALE_W, PH_BAR_H, MI_NEGRO);
+
+  for (int y = PH_SCALE_Y; y < (PH_SCALE_Y + PH_BAR_H); y++) {
+    float ratio = (float)(PH_SCALE_Y + PH_BAR_H - 1 - y) / (float)(PH_BAR_H - 1);
+    float p = 11.0f - (ratio * 8.0f);
+    uint16_t c = getPHScaleColor(p);
+    tft.fillRect(PH_BAR_X - 1, y, PH_BAR_W + 2, 1, blend565(c, MI_NEGRO, 110));
+    tft.fillRect(PH_BAR_X, y, PH_BAR_W, 1, c);
+  }
+
+  for (int p = 11; p >= 3; p--) {
+    int y = phToY((float)p);
+    uint16_t c = getPHScaleColor((float)p);
+    tft.setTextColor(c, MI_NEGRO);
+    tft.setTextSize(1);
+    tft.setTextFont(1);
+    tft.setCursor(PH_SCALE_X + 1, y - 2);
+    tft.print(p);
+  }
+
+}
+
+void redrawPHScaleBand(int centerY) {
+  int yStart = max(PH_SCALE_Y, centerY - 4);
+  int yEnd = min(PH_SCALE_Y + PH_BAR_H - 1, centerY + 4);
+  for (int y = yStart; y <= yEnd; y++) {
+    float ratio = (float)(PH_SCALE_Y + PH_BAR_H - 1 - y) / (float)(PH_BAR_H - 1);
+    float p = 11.0f - (ratio * 8.0f);
+    uint16_t c = getPHScaleColor(p);
+    tft.fillRect(PH_BAR_X - 1, y, PH_BAR_W + 2, 1, blend565(c, MI_NEGRO, 110));
+    tft.fillRect(PH_BAR_X, y, PH_BAR_W, 1, c);
+  }
+}
+
+void redrawPHValueArea() {
+  const int phValueX = PH_SCALE_X - 2;
+  const int phValueY = PH_SCALE_Y + PH_BAR_H + 10;
+  const int textW = 30;
+  const int textH = 12;
+  tft.fillRect(phValueX, phValueY, textW, textH, MI_NEGRO);
+}
+
+void drawPHIndicator(float ph) {
+  const int phValueX = PH_SCALE_X - 2;
+  const int phValueY = PH_SCALE_Y + PH_BAR_H + 10;
+  const int dotX = PH_BAR_X + (PH_BAR_W / 2);
+  int y = phToY(ph);
+
+  if (fabs(ph - lastPhIndicatorValue) < 0.01f && y == lastPhIndicatorY) return;
+
+  if (lastPhIndicatorY >= PH_SCALE_Y && lastPhIndicatorY < (PH_SCALE_Y + PH_BAR_H)) {
+    redrawPHScaleBand(lastPhIndicatorY);
+  }
+
+  redrawPHScaleBand(y);
+  redrawPHValueArea();
+
+  uint16_t c = getPHScaleColor(ph);
+  tft.fillCircle(dotX, y, 2, MI_ROJO_CLARO);
+  tft.drawPixel(dotX, y, MI_ROJO);
+  tft.setTextColor(c, MI_NEGRO);
+  tft.setTextSize(1);
+  tft.setTextFont(2);
+  tft.setCursor(phValueX, phValueY);
+  tft.print(ph, 1);
+
+  lastPhIndicatorY = y;
+  lastPhIndicatorValue = ph;
+}
+
+
+
+void drawCO2HudCard(float co2, bool forceRedraw = false) {
+  const int cardX = 10;
+  const int cardY = 204;
+  const int cardW = 132;
+  const int cardH = 30;
+  const bool danger = co2 >= 1900.0f;
+
+  if (danger && millis() - lastCO2BlinkToggleMs >= 350) {
+    lastCO2BlinkOn = !lastCO2BlinkOn;
+    lastCO2BlinkToggleMs = millis();
+    forceRedraw = true;
+  }
+
+  if (!danger && lastCO2BlinkOn) {
+    lastCO2BlinkOn = false;
+    forceRedraw = true;
+  }
+
+  if (!forceRedraw && fabs(co2 - lastCO2) <= 0.5f) return;
+
+  uint16_t bg = MI_BLANCO;
+  uint16_t border = 0x7DFF;
+  uint16_t txt = MI_NEGRO;
+
+  if (danger && lastCO2BlinkOn) {
+    bg = MI_ROJO;
+    border = MI_ROJO_CLARO;
+    txt = MI_BLANCO;
+  }
+
+  tft.fillRoundRect(cardX, cardY, cardW, cardH, 5, bg);
+  tft.drawRoundRect(cardX, cardY, cardW, cardH, 5, border);
+
+  char numStr[10];
+  sprintf(numStr, "%.0f", co2);
+
+  valueSprite.deleteSprite();
+  valueSprite.setColorDepth(8);
+  valueSprite.createSprite(cardW - 8, cardH - 8);
+
+  // IMPORTANTE:
+  valueSprite.fillSprite(bg);
+
+  valueSprite.setTextColor(txt, bg);
+  valueSprite.setTextFont(1);
+
+  // CO2 pequeño a la izquierda
+  valueSprite.setTextSize(1);
+  valueSprite.setCursor(2, 10);
+  valueSprite.print("CO2");
+
+  // número grande
+  valueSprite.setTextSize(2);
+  valueSprite.setCursor(30, 4);
+  valueSprite.print(numStr);
+
+  // PPM pequeño
+  valueSprite.setTextSize(1);
+  valueSprite.setCursor(86, 10);
+  valueSprite.print("PPM");
+
+  // IMPORTANTE
+  valueSprite.pushSprite(cardX + 4, cardY + 4);
+
+  lastCO2 = co2;
+  }
+
+
+void drawPumpButton() {
+  drawDarkCard(BTN_PUMP_X, BTN_PUMP_Y, BTN_PUMP_W, BTN_PUMP_H, MI_GRIS2, MI_GRIS0, manualPump ? MI_MORADO : MI_CYAN, manualPump ? MI_ROJO : MI_AMARILLO);
+  tft.setTextColor(MI_BLANCO);
+  tft.setTextSize(1);
+  tft.setCursor(BTN_PUMP_X + 16, BTN_PUMP_Y + 12);
+  tft.print("EC/pH");
+}
+
+void drawHumIndicator() {
+  const int humDotX = 262;
+  const int humDotY = 13;
+  const int humDotR = 4;
+  tft.fillCircle(humDotX, humDotY, humDotR, humidifierState ? MI_ROJO : MI_GRIS3);
+  tft.drawCircle(humDotX, humDotY, humDotR, blend565(MI_ROJO, MI_NEGRO, 120));
+}
+
+void redrawTouchArea(int x, int y) {
+  if (x >= 6 && x <= 156 && y >= 52 && y <= 190) {
+    drawDarkCard(6, 52, 150, 138, MI_GRIS1, MI_GRIS0, MI_CYAN, MI_AMARILLO);
+    tft.setTextColor(MI_BLANCO);
+    tft.setTextSize(1);
+    tft.setCursor(SOIL1_BAR_X + (SOIL_BAR_W / 2) - 14, SOIL_BAR_Y - 12); tft.print("10 CM");
+    tft.setCursor(SOIL2_BAR_X + (SOIL_BAR_W / 2) - 14, SOIL_BAR_Y - 12); tft.print("20 CM");
+    drawSoilBar(SOIL1_BAR_X, SOIL_BAR_Y, SOIL_BAR_W, SOIL_BAR_H, remoteSoil1, -999, "");
+    drawSoilBar(SOIL2_BAR_X, SOIL_BAR_Y, SOIL_BAR_W, SOIL_BAR_H, remoteSoil2, -999, "");
+  } else if (x >= 162 && x <= 314 && y >= 52 && y <= 190) {
+    drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2, MI_AMARILLO);
+    tft.setTextColor(MI_BLANCO);
+    tft.setCursor(172, 62); tft.print("VPD");
+    tft.setCursor(172, 142); tft.print("PPM/EC");
+    drawPHScaleStatic();
+    drawPHIndicator(phValue);
+    char vpdStr[10]; sprintf(vpdStr, "%.2f", vpd);
+    pushValue(166, 86, 100, 18, String(vpdStr), getVPDColor(vpd), 2, MC_DATUM);
+    char tdsStr[10]; sprintf(tdsStr, "%.0f", tdsValue);
+    pushValue(166, 162, 140, 18, String(tdsStr), MI_MORADO, 2, MC_DATUM);
+  } else if (x >= 10 && x <= 142 && y >= 204 && y <= 234) {
+    drawCO2HudCard(remoteCO2, true);
+  } else if (x >= BTN_RIEGO_X && x <= BTN_RIEGO_X + BTN_RIEGO_W && y >= BTN_RIEGO_Y && y <= BTN_RIEGO_Y + BTN_RIEGO_H) {
+    drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, manualWatering ? MI_ROJO : MI_CYAN, manualWatering ? MI_ROJO : MI_AMARILLO);
+    tft.setTextColor(MI_BLANCO);
+    tft.setTextSize(1);
+    tft.setCursor(BTN_RIEGO_X + 14, BTN_RIEGO_Y + 12); tft.print("RIEGO");
+  } else if (x >= BTN_PUMP_X && x <= BTN_PUMP_X + BTN_PUMP_W && y >= BTN_PUMP_Y && y <= BTN_PUMP_Y + BTN_PUMP_H) {
+    drawPumpButton();
+  } else {
+    tft.fillRect(max(0, x - 3), max(0, y - 3), 7, 7, MI_NEGRO);
+  }
+}
+
+void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
+  espNowLastSendOk = (status == ESP_NOW_SEND_SUCCESS);
+  if (espNowLastSendOk) Serial.println("[ESP-NOW TX OK]");
+}
+
+void OnDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len) {
+  if (len == sizeof(struct_message)) {
+    struct_message incomingMessage;
+    memcpy(&incomingMessage, incomingData, sizeof(incomingMessage));
+    remoteLightHours = incomingMessage.lightHours;
+    remoteDarkHours = incomingMessage.darkHours;
+    remoteDaysVeg = incomingMessage.daysVeg;
+    remoteDaysFlower = incomingMessage.daysFlower;
+    remoteVegetative = incomingMessage.isVegetative;
+    remoteLightMode = incomingMessage.inLightMode;
+    remoteProgress = incomingMessage.progressPercent;
+    remoteHour = incomingMessage.hour;
+    remoteMinute = incomingMessage.minute;
+    remoteSecond = incomingMessage.second;
+    lastEspNowReceiveMs = millis();
+    Serial.println("[ESP-NOW RX struct_message OK]");
+    return;
+  }
+
+  if (len == sizeof(greenhouse_message)) {
+    greenhouse_message incomingGreenhouse;
+    memcpy(&incomingGreenhouse, incomingData, sizeof(incomingGreenhouse));
+    lastEspNowReceiveMs = millis();
+    Serial.println("[ESP-NOW RX greenhouse_message OK]");
+    return;
+  }
+
+  if (len == sizeof(soil_message)) {
+    soil_message incomingSoil;
+    memcpy(&incomingSoil, incomingData, sizeof(incomingSoil));
+    remoteSoil1 = constrain(incomingSoil.soil1, 0.0f, 100.0f);
+    remoteSoil2 = constrain(incomingSoil.soil2, 0.0f, 100.0f);
+    remoteCO2 = max(incomingSoil.co2, 0.0f);
+    lastSoil1 = -999;
+    lastSoil2 = -999;
+    lastCO2 = -999;
+    lastEspNowReceiveMs = millis();
+    Serial.println("[ESP-NOW RX soil_message OK]");
+    Serial.print("REMOTE S1: ");
+    Serial.println(remoteSoil1);
+    Serial.print("REMOTE S2: ");
+    Serial.println(remoteSoil2);
+    Serial.print("REMOTE CO2: ");
+    Serial.println(remoteCO2);
+  }
 }
 
 void setup() {
-    Serial.begin(115200);
-    // =====================================================
-    // ================= WIFI STA ==========================
-    // =====================================================
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect(false, false);
-    delay(100);
-    printStaMac();
-
-    // WiFi.begin(ssid, password);
-    // while (WiFi.status() != WL_CONNECTED) {
-    //     delay(500);
-    // }
-    //
-    // wifiChannel = WiFi.channel();
-    // Serial.print("WIFI CHANNEL: ");
-    // Serial.println(wifiChannel);
-
-
-    // =====================================================
-    // ================= ESP NOW INIT ======================
-    // =====================================================
-    if (esp_now_init() != ESP_OK) {
-        Serial.println("ESP NOW ERROR");
-        return;
+  Serial.begin(115200);
+  Wire.begin(21,22);
+  tft.init();
+  tft.setRotation(1);
+  ts.begin();
+  ts.setRotation(4);
+  ads.begin();
+  rtc.begin();
+  if (!aht.begin()) {
+    Serial.println("AHT10 no encontrado");
+  } else {
+    Serial.println("AHT10 OK");
+  }
+  if (!bme.begin(0x76)) {
+    Serial.println("BME280 no encontrado en 0x76, probando 0x77");
+    if (!bme.begin(0x77)) {
+      Serial.println("BME280 no encontrado");
+    } else {
+      Serial.println("BME280 OK");
     }
-    esp_now_register_send_cb(OnDataSent);
+  } else {
+    Serial.println("BME280 OK");
+  }
+  pinMode(RELAY_PIN, OUTPUT);
+  pinMode(HUMIDIFIER_PIN, OUTPUT);
+  pinMode(WATER_PUMP_PIN, OUTPUT);
+  pinMode(MENU_BUTTON_PIN, INPUT);
+  preferences.begin("centro", false);
+  soilThreshold = preferences.getFloat("soilTh", 40.0f);
+
+  WiFi.mode(WIFI_STA);
+  if (esp_now_init() == ESP_OK) {
     esp_now_register_recv_cb(OnDataRecv);
-
-    // =====================================================
-    // ================= PEER ==============================
-    // =====================================================
+    esp_now_register_send_cb(OnDataSent);
     esp_now_peer_info_t peerInfo = {};
-    memcpy(
-        peerInfo.peer_addr,
-        macInvernadero,
-        6);
-    peerInfo.channel = 0;
+    memcpy(peerInfo.peer_addr, macFotoperiodo, 6);
+    peerInfo.channel = WiFi.channel();
     peerInfo.encrypt = false;
-    if (esp_now_add_peer(&peerInfo)
-        != ESP_OK) {
-        Serial.println("PEER ERROR");
-        return;
-    }
-    esp_now_peer_info_t peerInfo2 = {};
-    memcpy(peerInfo2.peer_addr, macSoilNode, 6);
-    peerInfo2.channel = 0;
-    peerInfo2.encrypt = false;
-    if (esp_now_add_peer(&peerInfo2) != ESP_OK) {
-        Serial.println("PEER2 ERROR");
-        return;
-    }
-    esp_now_peer_info_t peerInfo3 = {};
-    memcpy(peerInfo3.peer_addr, macCalendarioESP, 6);
-    peerInfo3.channel = 0;
-    peerInfo3.encrypt = false;
-    if (esp_now_add_peer(&peerInfo3) != ESP_OK) {
-        Serial.println("PEER3 ERROR");
-        return;
-    }
+    esp_now_add_peer(&peerInfo);
 
-    delay(1000); 
+    esp_now_peer_info_t soilPeerInfo = {};
+    memcpy(soilPeerInfo.peer_addr, macSoilNode, 6);
+    soilPeerInfo.channel = WiFi.channel();
+    soilPeerInfo.encrypt = false;
+    esp_now_add_peer(&soilPeerInfo);
+  }
 
-    SPI.begin(12, 13, 11); 
-    tft.init(240, 320); 
-    tft.setRotation(1); 
-    tft.invertDisplay(false); 
-    tft.fillScreen(MI_NEGRO);
-    
-    ts.begin(); 
-    ts.setRotation(1);
-    
-    if (SD.begin(SD_CS)) {
-        loadState();
-        loadHistory();
-    }
-    
-    pinMode(RELAY_PIN, OUTPUT);
-    
-    configTime(-21600, 0, "pool.ntp.org"); // UTC-6
-    
-    lastMillis = millis();
-    lastSave = millis();
-    lastTouchTime = millis();
-    lastAutoSave = millis();
-}
+  digitalWrite(RELAY_PIN, HIGH);
+  digitalWrite(HUMIDIFIER_PIN, LOW);
+  digitalWrite(WATER_PUMP_PIN, HIGH);
 
-void drawScreensaver() {
-    static int xPos = 60;
-    static int yPos = 100;
-    static unsigned long lastMove = 0;
+  menuSprite.setColorDepth(16);
+  valueSprite.setColorDepth(8);
 
-    if (millis() - lastMove > 30000 || screensaverActive == false) {
-        tft.fillScreen(MI_NEGRO);
-        struct tm ti;
-        if (getLocalTimeNoBlock(&ti)) {
-            char b[12];
-            strftime(b, 12, "%I:%M %p", &ti);
-            tft.setTextSize(2);
-            tft.setTextColor(0x4208); 
-            xPos = random(10, 160);
-            yPos = random(20, 200);
-            tft.setCursor(xPos, yPos);
-            tft.print(b);
-        }
-        lastMove = millis();
-        screensaverActive = true;
-    }
-}
-
-void drawVPD() {
-    if (
-        fabs(remoteVPD - lastDisplayedVPD) > 0.01f ||
-        millis() - lastVpdDraw > 2000
-    ) {
-        tft.setTextSize(1);
-        tft.setTextColor(ST77XX_YELLOW, MI_NEGRO);
-        tft.setCursor(270, 16);
-        tft.printf("VPD %.2f", remoteVPD);
-
-        lastDisplayedVPD = remoteVPD;
-        lastVpdDraw = millis();
-    }
-}
-
-void drawTDS() {
-    if (
-        fabs(remoteTDS - lastDisplayedTDS) > 1.0f ||
-        millis() - lastTdsDraw > 2000
-    ) {
-        tft.setTextSize(1);
-        tft.setTextColor(ST77XX_CYAN, MI_NEGRO);
-        tft.setCursor(270, 28);
-        tft.printf("TDS %.0f", remoteTDS);
-
-        lastDisplayedTDS = remoteTDS;
-        lastTdsDraw = millis();
-    }
-}
-
-void drawCO2() {
-    if (
-        fabs(remoteCO2 - lastDisplayedCO2) > 0.2f ||
-        millis() - lastCO2Draw > 500
-    ) {
-        tft.setTextSize(1);
-        uint16_t co2Color = (remoteCO2 > 1900.0f) ? ST77XX_RED : ST77XX_WHITE;
-        tft.setTextColor(co2Color, MI_NEGRO);
-        tft.fillRect(
-            268,
-            40,
-            52,
-            10,
-            MI_NEGRO
-        );
-        tft.setCursor(270, 40);
-        tft.printf("CO2 %.0f", remoteCO2);
-
-        lastDisplayedCO2 = remoteCO2;
-        lastCO2Draw = millis();
-    }
-}
-
-void drawSoilBars() {
-    if (
-        fabs(remoteSoil1 - lastDisplayedSoil1) > 0.2f ||
-        fabs(remoteSoil2 - lastDisplayedSoil2) > 0.2f ||
-        millis() - lastSoilDraw > 500
-    ) {
-        const int barW = 10;
-        const int barH = 45;
-        const int barY = 55;
-        const int bar1X = 275;
-        const int bar2X = 292;
-        const int labelY = barY + barH + 4;
-
-        float soil1 = constrain(remoteSoil1, 0.0f, 100.0f);
-        float soil2 = constrain(remoteSoil2, 0.0f, 100.0f);
-        int fill1 = (int)((soil1 / 100.0f) * (barH - 2));
-        int fill2 = (int)((soil2 / 100.0f) * (barH - 2));
-
-        tft.fillRect(
-            274,
-            55,
-            28,
-            55,
-            MI_NEGRO
-        );
-
-        tft.drawRect(bar1X, barY, barW, barH, 0x8410);
-        tft.drawRect(bar2X, barY, barW, barH, 0x8410);
-
-        if (fill1 > 0) tft.fillRect(bar1X + 1, barY + (barH - 1 - fill1), barW - 2, fill1, ST77XX_CYAN);
-        if (fill2 > 0) tft.fillRect(bar2X + 1, barY + (barH - 1 - fill2), barW - 2, fill2, ST77XX_BLUE);
-
-        tft.setTextSize(1);
-        tft.setTextColor(MI_BLANCO, MI_NEGRO);
-        tft.setCursor(bar1X - 1, labelY);
-        tft.print("S1");
-        tft.setCursor(bar2X - 1, labelY);
-        tft.print("S2");
-
-
-        lastDisplayedSoil1 = remoteSoil1;
-        lastDisplayedSoil2 = remoteSoil2;
-        lastSoilDraw = millis();
-    }
+  menuSprite.createSprite(MENU_W, MENU_H);
+  valueSprite.createSprite(80, 30);
+  drawStaticBackground();
+  co2CardNeedsFullRedraw = true;
 }
 
 void loop() {
-    static uint32_t lastHeartbeat = 0;
-
-    if (millis() - lastHeartbeat > 1000) {
-        Serial.println("UI ALIVE");
-        lastHeartbeat = millis();
+  bool currentButton = digitalRead(MENU_BUTTON_PIN);
+  if (currentButton && !lastButtonState && (millis() - lastMenuDebounceMs > 180)) {
+    inMenu = !inMenu;
+    lastMenuDebounceMs = millis();
+    menuNeedsRedraw = true;
+    if (!inMenu && menuVisible) {
+      tft.fillRect(MENU_X, MENU_Y, MENU_W, MENU_H, MI_NEGRO);
+      drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2, MI_AMARILLO);
+      tft.setTextColor(MI_BLANCO);
+      tft.setCursor(172, 62); tft.print("VPD");
+      tft.setCursor(172, 142); tft.print("PPM/EC");
+      drawPHScaleStatic();
+      lastPhIndicatorValue = -999;
+      co2CardNeedsFullRedraw = true;
+      menuVisible = false;
+      lastVpd = lastPh = lastTds = -999;
     }
-  
-    updatePhotoperiod(); 
+  }
+  lastButtonState = currentButton;
 
-    // --- RECONEXIÓN WIFI SILENCIOSA (Cada 30 seg) ---
-    if (millis() - lastWifiCheck > 30000) {
-        if (WiFi.status() != WL_CONNECTED) {
-            Serial.println("WiFi reconnecting...");
-            WiFi.reconnect();
-        }
-        lastWifiCheck = millis();
-    }
+  sensors_event_t humidity, temp;
+  aht.getEvent(&humidity, &temp);
 
-    struct tm ti;
-    bool isNight = false;
-    if (getLocalTimeNoBlock(&ti)) {
-        if (ti.tm_hour >= 0 && ti.tm_hour < 8) isNight = true;
-    }
+  float t = temp.temperature;
+  float h = humidity.relative_humidity;
+  if (!isnan(t)) airTemp = t;
+  if (!isnan(h)) airHum = h;
 
-    if (ts.touched()) {
-        lastTouchTime = millis();
-        if (screensaverActive) {
-            screensaverActive = false;
-            uiNeedsFullRedraw = true;
-            weedNeedsRedraw = true;
-            tft.fillScreen(MI_NEGRO);
-            drawUI();
-        }
+  soil1 = readSoilPercent(0);
+  soil2 = readSoilPercent(1);
+  phValue = readPH();
+  tdsValue = readTDS();
+  vpd = calculateVPD(airTemp, airHum);
 
-        TS_Point p = ts.getPoint();
-        int tx = map(p.y, 200, 3800, 320, 0); 
-        int ty = map(p.x, 200, 3800, 0, 240);
-        
-        if (touchStartTime == 0) {
-            touchStartTime = millis();
-            handleAction(tx, ty, 1); 
-        } else if (millis() - touchStartTime > 1000) {
-            handleAction(tx, ty, 3); 
-            delay(100); 
-        } else if (millis() - touchStartTime > 400) {
-            handleAction(tx, ty, 1); 
-            delay(120);
-        }
+  if (manualWatering) {
+    relayState = true;
+  } else if (soil1 < soilThreshold || soil2 < soilThreshold) {
+    relayState = true;
+  } else {
+    relayState = false;
+  }
+  if (relayState != lastRelayState) {
+    digitalWrite(RELAY_PIN, relayState ? LOW : HIGH);
+    lastRelayState = relayState;
+  }
+
+  if (manualPump) {
+    waterPumpState = true;
+  } else {
+    waterPumpState = false;
+  }
+  if (waterPumpState != lastPumpState) {
+    digitalWrite(WATER_PUMP_PIN, waterPumpState ? LOW : HIGH);
+    lastPumpState = waterPumpState;
+  }
+
+  String currentStage;
+  float targetVPDMin = 0.81f;
+  float targetVPDMax = 1.19f;
+  const float vpdHysteresis = 0.05f;
+
+  if (remoteVegetative) {
+    if (remoteDaysVeg <= 14) {
+      currentStage = "SEEDLING";
+      targetVPDMin = 0.40f;
+      targetVPDMax = 0.79f;
+    } else if (remoteDaysVeg <= 42) {
+      currentStage = "VEG";
+      targetVPDMin = 0.81f;
+      targetVPDMax = 1.19f;
     } else {
-        touchStartTime = 0;
+      currentStage = "LATE VEG";
+      targetVPDMin = 0.81f;
+      targetVPDMax = 1.19f;
     }
-
-    if (!showGraph && !screensaverActive) {
-        drawVPD();
-        drawTDS();
-        drawCO2();
-        drawSoilBars();
-        drawWeedagotchi();
-    }
-
-    if (millis() - lastUIRefresh > 1000) {
-        if (isNight && (millis() - lastTouchTime > 30000)) {
-            drawScreensaver();
-        } else {
-            screensaverActive = false; 
-            if (!showGraph) {
-                drawUI();
-            } else {
-                drawGraph();
-            }
-        }
-        
-        lastUIRefresh = millis();
-        // =====================================================
-        // ================= ESP NOW SEND ======================
-        // =====================================================
-        struct tm ti2;
-        if (getLocalTimeNoBlock(&ti2)) {
-            growData.hour = ti2.tm_hour;
-            growData.minute = ti2.tm_min;
-            growData.second = ti2.tm_sec;
-        }
-        growData.lightHours = lightHours;
-        growData.darkHours = darkHours;
-        growData.daysVeg = daysVeg;
-        growData.daysFlower = daysFlower;
-        growData.isVegetative = isVegetative;
-        growData.inLightMode = inLightMode;
-        growData.progressPercent =
-            (photoSecondsElapsed /
-            ((lightHours + darkHours) * 3600.0))
-            * 100.0;
-        growData.vpd = remoteVPD;
-
-        if (millis() - lastEspNowSend > 3000) {
-            esp_now_send(
-                macInvernadero,
-                (uint8_t *) &growData,
-                sizeof(growData)
-            );
-            esp_now_send(
-                macCalendarioESP,
-                (uint8_t *) &growData,
-                sizeof(growData)
-            );
-            Serial.println("[ESP-NOW] CALENDARIO ENVIADO");
-
-            lastEspNowSend = millis();
-        }
-
-        handleAutoSave();
-    }
-}
-
-void updatePhotoperiod() {
-    unsigned long now = millis();
-    double delta = (now - lastMillis) / 1000.0;
-    lastMillis = now;
-    double totalSecs = (lightHours + darkHours) * 3600.0;
-    double lightSecs = lightHours * 3600.0;
-    photoSecondsElapsed += delta;
-
-    if (photoSecondsElapsed >= totalSecs) {
-        photoSecondsElapsed = 0;
-        if (isVegetative) daysVeg++; else daysFlower++;
-        saveState();
-    }
-
-    if (photoSecondsElapsed < lightSecs) {
-        digitalWrite(RELAY_PIN, LOW); 
-        inLightMode = true;
+  } else {
+    if (remoteDaysFlower <= 42) {
+      currentStage = "FLOWER";
+      targetVPDMin = 0.81f;
+      targetVPDMax = 1.19f;
     } else {
-        digitalWrite(RELAY_PIN, HIGH); 
-        inLightMode = false;
+      currentStage = "LATE FLOWER";
+      targetVPDMin = 1.21f;
+      targetVPDMax = 1.60f;
     }
+  }
 
-    if (now - lastHistoryUpdate > 3600000) {
-        for (int i = 0; i < 23; i++) history[i] = history[i+1];
-        history[23] = (photoSecondsElapsed / totalSecs) * 100.0;
-        lastHistoryUpdate = now;
+  if (vpd > targetVPDMax) {
+    humidifierState = true;
+  } else if (vpd <= (targetVPDMax - vpdHysteresis)) {
+    humidifierState = false;
+  }
+  if (humidifierState != lastHumState) {
+    digitalWrite(HUMIDIFIER_PIN, humidifierState ? HIGH : LOW);
+    lastHumState = humidifierState;
+    drawHumIndicator();
+  }
+
+  Serial.print("ETAPA: ");
+  Serial.println(currentStage);
+  Serial.print("TARGET VPD: ");
+  Serial.print(targetVPDMin);
+  Serial.print(" - ");
+  Serial.println(targetVPDMax);
+  Serial.print("VPD ACTUAL: ");
+  Serial.println(vpd);
+  Serial.print("HUMIDIFIER: ");
+  Serial.println(humidifierState ? "ON" : "OFF");
+
+  if (remoteSecond != lastSecond) {
+    char timeStr[10]; sprintf(timeStr, "%02d:%02d:%02d", remoteHour, remoteMinute, remoteSecond);
+    pushValue(14, 24, 86, 16, String(timeStr), MI_CYAN, 1);
+    lastSecond = remoteSecond;
+  }
+  if (fabs(airTemp - lastAirTemp) > 0.09) {
+    char valStr[10]; sprintf(valStr, "%2.1fC", airTemp);
+    pushValue(114, 24, 90, 16, String(valStr), MI_ROJO, 2, MC_DATUM);
+    lastAirTemp = airTemp;
+  }
+  if (fabs(airHum - lastAirHum) > 0.09) {
+    char valStr[10]; sprintf(valStr, "%2.0f%%", airHum);
+    pushValue(220, 24, 90, 16, String(valStr), MI_CYAN, 2, MC_DATUM);
+    lastAirHum = airHum;
+  }
+
+  drawSoilBar(SOIL1_BAR_X, SOIL_BAR_Y, SOIL_BAR_W, SOIL_BAR_H, remoteSoil1, lastSoil1, "");
+  drawSoilBar(SOIL2_BAR_X, SOIL_BAR_Y, SOIL_BAR_W, SOIL_BAR_H, remoteSoil2, lastSoil2, "");
+  lastSoil1 = remoteSoil1; lastSoil2 = remoteSoil2;
+
+  if (fabs(vpd - lastVpd) > 0.02) {
+    char valStr[10]; sprintf(valStr, "%.2f", vpd);
+    pushValue(166, 82, 100, 18, String(valStr), getVPDColor(vpd), 2, MC_DATUM);
+    lastVpd = vpd;
+  }
+  drawPHIndicator(phValue);
+  if (fabs(phValue - lastPh) > 0.02) lastPh = phValue;
+  if (fabs(tdsValue - lastTds) > 3) {
+    char valStr[10]; sprintf(valStr, "%.0f", tdsValue);
+    pushValue(166, 162, 140, 18, String(valStr), MI_MORADO, 2, MC_DATUM);
+    lastTds = tdsValue;
+  }
+
+  drawCO2HudCard(remoteCO2, co2CardNeedsFullRedraw);
+  co2CardNeedsFullRedraw = false;
+
+  greenhouseData.vpd = vpd;
+  greenhouseData.tds = tdsValue;
+  greenhouseData.ph = phValue;
+  greenhouseData.soil1 = soil1;
+  greenhouseData.soil2 = soil2;
+  greenhouseData.airTemp = airTemp;
+  greenhouseData.airHum = airHum;
+  greenhouseData.relayState = relayState;
+
+  if (millis() - lastEspNowSendMs >= 3000) {
+    esp_now_send(macFotoperiodo, (uint8_t *)&greenhouseData, sizeof(greenhouseData));
+    lastEspNowSendMs = millis();
+  }
+
+  int tx = 0, ty = 0;
+  if (readTouchScreen(tx, ty)) {
+    if (lastTouchX >= 0 && lastTouchY >= 0 && millis() - touchDotTime >= 80) redrawTouchArea(lastTouchX, lastTouchY);
+    lastTouchX = tx;
+    lastTouchY = ty;
+    touchDotTime = millis();
+    tft.fillCircle(tx, ty, 2, blend565(MI_CYAN, MI_NEGRO, 120));
+
+    if (!inMenu && tx > BTN_RIEGO_X && tx < BTN_RIEGO_X + BTN_RIEGO_W && ty > BTN_RIEGO_Y && ty < BTN_RIEGO_Y + BTN_RIEGO_H) {
+      manualWatering = !manualWatering;
+      drawDarkCard(BTN_RIEGO_X, BTN_RIEGO_Y, BTN_RIEGO_W, BTN_RIEGO_H, MI_GRIS2, MI_GRIS0, manualWatering ? MI_ROJO : MI_CYAN, manualWatering ? MI_ROJO : MI_AMARILLO);
+      tft.setTextColor(MI_BLANCO);
+      tft.setTextSize(1);
+      tft.setCursor(BTN_RIEGO_X + 14, BTN_RIEGO_Y + 12); tft.print("RIEGO");
     }
-}
-
-void printStyled(int x, int y, String label, String value, uint16_t valCol, int size, bool arrows = true) {
-    tft.setTextSize(size); tft.setCursor(x, y);
-    if (arrows) { tft.setTextColor(ST77XX_RED, MI_NEGRO); tft.print("< "); }
-    tft.setTextColor(MI_BLANCO, MI_NEGRO); tft.print(label);
-    tft.setTextColor(valCol, MI_NEGRO); tft.print(value);
-    if (arrows) { tft.setTextColor(ST77XX_RED, MI_NEGRO); tft.print(">"); }
-}
-
-int happyFace[19][21] = {
-    {0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0},
-    {0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0},
-    {0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0},
-    {0,1,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,1,0},
-    {0,1,1,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1,1,0},
-    {0,0,1,1,0,0,0,0,1,1,1,1,1,0,0,0,0,1,1,0,0},
-    {0,0,1,1,1,0,0,0,1,1,1,1,1,0,0,0,1,1,1,0,0},
-    {0,0,1,1,1,1,0,0,1,1,1,1,1,0,0,1,1,1,1,0,0},
-    {0,0,0,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,0,0,0},
-    {0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0},
-    {0,0,0,0,1,1,1,1,0,1,1,1,0,1,1,1,1,0,0,0,0},
-    {0,0,0,0,0,1,1,1,0,1,1,1,0,1,1,1,0,0,0,0,0},
-    {1,1,1,1,0,0,1,1,0,1,1,1,0,1,1,0,0,1,1,1,1},
-    {0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0},
-    {0,0,1,1,1,1,1,1,0,0,0,0,0,1,1,1,1,1,1,0,0},
-    {0,0,0,0,0,0,1,1,1,0,0,0,1,1,1,0,0,0,0,0,0},
-    {0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0},
-    {0,0,0,1,1,1,1,0,0,0,1,0,0,0,1,1,1,1,0,0,0},
-    {0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0}
-};
-
-int angryFace[19][21] = {
-    {0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0},
-    {0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0},
-    {0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0},
-    {0,1,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,1,0},
-    {0,1,1,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1,1,0},
-    {0,0,1,1,0,0,0,0,1,1,1,1,1,0,0,0,0,1,1,0,0},
-    {0,0,1,1,1,0,0,0,1,1,1,1,1,0,0,0,1,1,1,0,0},
-    {0,0,1,1,1,1,0,0,1,1,1,1,1,0,0,1,1,1,1,0,0},
-    {0,0,0,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,0,0,0},
-    {0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0},
-    {0,0,0,0,1,1,1,1,0,1,1,1,0,1,1,1,1,0,0,0,0},
-    {0,0,0,0,0,1,1,1,0,1,1,1,0,1,1,1,0,0,0,0,0},
-    {1,1,1,1,0,0,1,1,0,0,1,0,0,1,1,0,0,1,1,1,1},
-    {0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0},
-    {0,0,1,1,1,1,1,1,0,0,0,0,0,1,1,1,1,1,1,0,0},
-    {0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0},
-    {0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0},
-    {0,0,0,1,1,1,1,0,0,0,1,0,0,0,1,1,1,1,0,0,0},
-    {0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0}
-};
-
-int sadFace[19][21] = {
-    {0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0},
-    {0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0},
-    {0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0},
-    {0,1,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,1,0},
-    {0,1,1,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1,1,0},
-    {0,0,1,1,0,0,0,0,1,1,1,1,1,0,0,0,0,1,1,0,0},
-    {0,0,1,1,1,0,0,0,1,1,1,1,1,0,0,0,1,1,1,0,0},
-    {0,0,1,1,1,1,0,0,1,1,1,1,1,0,0,1,1,1,1,0,0},
-    {0,0,0,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,0,0,0},
-    {0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0},
-    {0,0,0,0,1,1,1,1,0,1,1,1,0,1,1,1,1,0,0,0,0},
-    {0,0,0,0,0,1,1,1,0,1,1,1,0,1,1,1,0,0,0,0,0},
-    {1,1,1,1,0,0,1,1,0,1,1,1,0,1,1,0,0,1,1,1,1},
-    {0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0},
-    {0,0,1,1,1,1,1,1,0,0,0,0,0,1,1,1,1,1,1,0,0},
-    {0,0,0,0,0,0,1,1,0,1,1,1,0,1,1,0,0,0,0,0,0},
-    {0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0},
-    {0,0,0,1,1,1,1,0,0,0,1,0,0,0,1,1,1,1,0,0,0},
-    {0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0}
-};
-
-int deadFace[19][21] = {
-    {0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0},
-    {0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0},
-    {0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0},
-    {0,1,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,1,0},
-    {0,1,1,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1,1,0},
-    {0,0,1,1,0,0,0,0,1,1,1,1,1,0,0,0,0,1,1,0,0},
-    {0,0,1,1,1,0,0,0,1,1,1,1,1,0,0,0,1,1,1,0,0},
-    {0,0,1,1,1,1,0,0,1,1,1,1,1,0,0,1,1,1,1,0,0},
-    {0,0,0,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,0,0,0},
-    {0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0},
-    {0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0},
-    {0,0,0,0,0,1,1,0,1,0,1,0,1,0,1,1,0,0,0,0,0},
-    {1,1,1,1,0,0,1,1,0,1,1,1,0,1,1,0,0,1,1,1,1},
-    {0,1,1,1,1,1,1,0,1,0,1,0,1,0,1,1,1,1,1,1,0},
-    {0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0},
-    {0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0},
-    {0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0},
-    {0,0,0,1,1,1,1,0,0,0,1,0,0,0,1,1,1,1,0,0,0},
-    {0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0}
-};
-
-void drawGameboyFrame(int x, int y, int p, int frame[19][21]) {
-    if (p <= 0 || x < p || y < p) return;
-
-    const int spriteRight = x + (22 * p);
-    const int spriteBottom = y + (20 * p);
-    if (spriteRight > (int)tft.width() || spriteBottom > (int)tft.height()) return;
-
-    uint16_t dark = 0x0320;
-    uint16_t light = 0x07E0;
-
-    auto px = [&](int xx, int yy, uint16_t c) {
-        tft.fillRect(x + xx * p, y + yy * p, p, p, c);
-    };
-
-    for (int yy = 0; yy < 19; yy++) {
-        for (int xx = 0; xx < 21; xx++) {
-            if (frame[yy][xx]) {
-                px(xx - 1, yy, dark);
-                px(xx + 1, yy, dark);
-                px(xx, yy - 1, dark);
-                px(xx, yy + 1, dark);
-            }
-        }
+    if (!inMenu &&
+      tx > BTN_PUMP_X &&
+      tx < BTN_PUMP_X + BTN_PUMP_W &&
+      ty > BTN_PUMP_Y &&
+      ty < BTN_PUMP_Y + BTN_PUMP_H
+    ) {
+      manualPump = !manualPump;
+      drawPumpButton();
     }
+    if (inMenu && tx > (MENU_X + MENU_W - 26) && tx < (MENU_X + MENU_W - 6) && ty > (MENU_Y + 6) && ty < (MENU_Y + 26)) { inMenu = false; menuNeedsRedraw = true; }
+    if (inMenu && tx > (MENU_X + 22) && tx < (MENU_X + 82) && ty > (MENU_Y + 90) && ty < (MENU_Y + 130)) { soilThreshold = min(95.0f, soilThreshold + 1); saveSoilThreshold(); menuNeedsRedraw = true; }
+    if (inMenu && tx > (MENU_X + 108) && tx < (MENU_X + 168) && ty > (MENU_Y + 90) && ty < (MENU_Y + 130)) { soilThreshold = max(5.0f, soilThreshold - 1); saveSoilThreshold(); menuNeedsRedraw = true; }
+  }
 
-    for (int yy = 0; yy < 19; yy++) {
-        for (int xx = 0; xx < 21; xx++) {
-            if (frame[yy][xx]) {
-                px(xx, yy, light);
-            }
-        }
+  if (inMenu) {
+    if (menuNeedsRedraw) {
+      menuSprite.fillSprite(MI_NEGRO);
+      menuSprite.fillRoundRect(0, 0, MENU_W, MENU_H, 10, MI_GRIS0);
+      menuSprite.drawRoundRect(0, 0, MENU_W, MENU_H, 10, MI_CYAN);
+      menuSprite.drawRoundRect(1, 1, MENU_W - 2, MENU_H - 2, 10, MI_AZUL2);
+      menuSprite.setTextColor(MI_BLANCO); menuSprite.setTextSize(2);
+      menuSprite.setCursor(48, 14); menuSprite.print("SET SOIL");
+      menuSprite.setTextSize(3);
+      menuSprite.setCursor(66, 50); menuSprite.print(soilThreshold, 0); menuSprite.print("%");
+      menuSprite.setTextSize(2);
+      menuSprite.drawRoundRect(22, 90, 60, 40, 6, MI_CYAN); menuSprite.setCursor(44, 102); menuSprite.print("+");
+      menuSprite.drawRoundRect(108, 90, 60, 40, 6, MI_CYAN); menuSprite.setCursor(131, 102); menuSprite.print("-");
+      menuSprite.setTextSize(2); menuSprite.setCursor(MENU_W - 24, 8); menuSprite.print("X");
+      menuNeedsRedraw = false;
     }
-}
+    menuSprite.pushSprite(MENU_X, MENU_Y);
+    menuVisible = true;
+  } else if (menuVisible) {
+    tft.fillRect(MENU_X, MENU_Y, MENU_W, MENU_H, MI_NEGRO);
+    drawDarkCard(162, 52, 152, 138, MI_GRIS1, MI_GRIS0, MI_AZUL2, MI_AMARILLO);
+    tft.setTextColor(MI_BLANCO);
+    tft.setCursor(172, 62); tft.print("VPD");
+    tft.setCursor(172, 142); tft.print("PPM/EC");
+    drawPHScaleStatic();
+    lastPhIndicatorValue = -999;
+    co2CardNeedsFullRedraw = true;
+    menuVisible = false;
+    lastVpd = lastPh = lastTds = -999;
+  }
 
-void drawWeedagotchi() {
-    static int lastSway = 999;
-    static int lastMoodBucket = -1;
+  if (lastTouchX >= 0 && lastTouchY >= 0 && millis() - touchDotTime >= 120) {
+    redrawTouchArea(lastTouchX, lastTouchY);
+    lastTouchX = -1;
+    lastTouchY = -1;
+  }
 
-    int sway = (int)(sin(millis() * 0.0007f) * 1.0f);
-    float mood = (remoteSoil1 + remoteSoil2) * 0.5f;
-    int moodBucket = (mood >= 60.0f) ? 0 : (mood >= 40.0f) ? 1 : (mood >= 10.0f) ? 2 : 3;
+  if (millis() - lastHeapLogMs >= 5000) {
+    Serial.print("Heap: ");
+    Serial.println(ESP.getFreeHeap());
+    lastHeapLogMs = millis();
+  }
 
-    if (!weedNeedsRedraw && sway == lastSway && moodBucket == lastMoodBucket) return;
-
-    // Huella completa del sprite, incluido el borde de un pixel y ambos extremos del sway.
-    tft.fillRect(234, 115, 71, 63, MI_NEGRO);
-
-    if (moodBucket == 0) {
-        drawGameboyFrame(238 + sway, 118, 3, happyFace);
-    } else if (moodBucket == 1) {
-        drawGameboyFrame(238 + sway, 118, 3, angryFace);
-    } else if (moodBucket == 2) {
-        drawGameboyFrame(238 + sway, 118, 3, sadFace);
-    } else {
-        drawGameboyFrame(238 + sway, 118, 3, deadFace);
-    }
-
-    lastSway = sway;
-    lastMoodBucket = moodBucket;
-    weedNeedsRedraw = false;
-}
-
-void drawUI() {
-    static int lastWifiStatus = -1;
-    static int lastLightHours = -1;
-    static int lastDarkHours = -1;
-    static int lastDaysVeg = -1;
-    static int lastDaysFlower = -1;
-    static int lastVegetative = -1;
-    static int lastLightMode = -1;
-
-    int wifiStatus = WiFi.status();
-    if (uiNeedsFullRedraw || wifiStatus != lastWifiStatus) {
-        uint16_t wifiCol = (wifiStatus == WL_CONNECTED) ? ST77XX_CYAN : ST77XX_RED;
-        tft.fillCircle(5, 5, 3, wifiCol);
-        lastWifiStatus = wifiStatus;
-    }
-
-    tft.setTextSize(3);
-    tft.setTextColor(MI_BLANCO, MI_NEGRO);
-    struct tm ti;
-    tft.setCursor(55, 15);
-    if (getLocalTimeNoBlock(&ti)) {
-        char b[12];
-        strftime(b, sizeof(b), "%I:%M %p", &ti);
-        tft.print(b);
-    } else {
-        tft.print("--:-- --");
-    }
-
-    if (uiNeedsFullRedraw || lightHours != lastLightHours || darkHours != lastDarkHours) {
-        tft.setTextSize(1);
-        tft.setTextColor(ST77XX_YELLOW, MI_NEGRO);
-        tft.setCursor(135, 45);
-        tft.printf("Ciclo %dh    ", (lightHours + darkHours));
-        printStyled(10, 70, "LUZ: ", String(lightHours) + "h  ", ST77XX_YELLOW, 1);
-        printStyled(170, 70, "OSC: ", String(darkHours) + "h  ", MI_BLANCO, 1);
-        lastLightHours = lightHours;
-        lastDarkHours = darkHours;
-    }
-
-    uint16_t mCol = isVegetative ? ST77XX_GREEN : MI_MORADO;
-    if (uiNeedsFullRedraw || (int)isVegetative != lastVegetative) {
-        printStyled(10, 100, "MODO: ", (isVegetative ? "VEGETACION" : "FLORACION  "), mCol, 2);
-        lastVegetative = isVegetative;
-    }
-    if (uiNeedsFullRedraw || daysVeg != lastDaysVeg) {
-        printStyled(10, 130, "DIAS VEG:  ", String(daysVeg) + "  ", ST77XX_GREEN, 2);
-        lastDaysVeg = daysVeg;
-    }
-    if (uiNeedsFullRedraw || daysFlower != lastDaysFlower) {
-        printStyled(10, 160, "DIAS FLOR: ", String(daysFlower) + "  ", MI_MORADO, 2);
-        lastDaysFlower = daysFlower;
-    }
-
-    const int bx = 30;
-    const int bw = 260;
-    const int by = 190;
-    double phaseDur = inLightMode ? (lightHours * 3600.0) : (darkHours * 3600.0);
-    double phaseElap = inLightMode ? photoSecondsElapsed : (photoSecondsElapsed - (lightHours * 3600.0));
-    if (phaseDur <= 0.0) phaseDur = 1.0;
-    if (phaseElap < 0.0) phaseElap = 0.0;
-    if (phaseElap > phaseDur) phaseElap = phaseDur;
-    float perc = constrain((float)((phaseElap / phaseDur) * 100.0), 0.0f, 100.0f);
-    int progressWidth = constrain((int)((bw - 4) * (perc / 100.0f)), 0, bw - 4);
-
-    if (uiNeedsFullRedraw) {
-        tft.drawRect(bx, by, bw, 15, MI_BLANCO);
-    }
-    if (progressWidth > 0) {
-        tft.fillRect(bx + 2, by + 2, progressWidth, 11, mCol);
-    }
-    const int remainingWidth = (bw - 4) - progressWidth;
-    if (remainingWidth > 0) {
-        tft.fillRect(bx + 2 + progressWidth, by + 2, remainingWidth, 11, MI_NEGRO);
-    }
-
-    if (uiNeedsFullRedraw || (int)inLightMode != lastLightMode) {
-        tft.setTextSize(1);
-        printStyled(10, 220, "FASE: ", (inLightMode ? "LUZ      " : "OSCURIDAD"), MI_BLANCO, 1, true);
-        lastLightMode = inLightMode;
-    }
-
-    tft.setTextSize(1);
-    tft.setCursor(170, 220);
-    tft.setTextColor(MI_BLANCO, MI_NEGRO);
-    int h = (int)(phaseElap / 3600);
-    int m = (int)((long)phaseElap % 3600 / 60);
-    int s = (int)((long)phaseElap % 60);
-    tft.printf("%02d:%02d:%02d ", h, m, s);
-    tft.setTextColor(MI_NARANJA, MI_NEGRO);
-    tft.printf("%3d%%  ", (int)perc);
-
-    uiNeedsFullRedraw = false;
-}
-
-void drawGraph() {
-    tft.fillScreen(MI_NEGRO);
-    tft.setTextColor(MI_BLANCO); tft.setTextSize(2);
-    tft.setCursor(60, 10); tft.print("HISTORIAL 24H (%)");
-    tft.drawLine(30, 40, 30, 200, MI_BLANCO);
-    tft.drawLine(30, 200, 300, 200, MI_BLANCO);
-    for (int i = 0; i < 23; i++) {
-        float value1 = constrain(history[i], 0.0f, 100.0f);
-        float value2 = constrain(history[i + 1], 0.0f, 100.0f);
-        int x1 = 30 + (i * 11), y1 = 200 - (value1 * 1.5f);
-        int x2 = 30 + ((i + 1) * 11), y2 = 200 - (value2 * 1.5f);
-        tft.drawLine(x1, y1, x2, y2, ST77XX_GREEN);
-    }
-    tft.setTextSize(1); tft.setTextColor(ST77XX_RED);
-    tft.setCursor(100, 220); tft.print("< TOCAR PARA VOLVER >");
-}
-
-void handleAction(int tx, int ty, int step) {
-    if (showGraph) {
-        showGraph = false;
-        uiNeedsFullRedraw = true;
-        weedNeedsRedraw = true;
-        tft.fillScreen(MI_NEGRO);
-        return;
-    }
-    if (ty >= 180 && ty <= 210) {
-        float ratio = constrain((float)(tx - 30) / 260.0, 0.0, 1.0);
-        double phDur = inLightMode ? (lightHours*3600.0) : (darkHours*3600.0);
-        photoSecondsElapsed = inLightMode ? (ratio*phDur) : (lightHours*3600.0 + (ratio*phDur));
-    }
-    else if (ty > 60 && ty < 90 && tx < 150) {
-        if (tx < 75) lightHours = (lightHours > step) ? lightHours - step : 1;
-        else lightHours = (lightHours < (100 - step)) ? lightHours + step : 99;
-    }
-    else if (ty > 60 && ty < 90 && tx >= 150) {
-        if (tx < 230) darkHours = (darkHours > step) ? darkHours - step : 1;
-        else darkHours = (darkHours < (100 - step)) ? darkHours + step : 99;
-    }
-    else if (ty > 90 && ty < 120) { isVegetative = !isVegetative; }
-    else if (ty > 120 && ty < 150) { 
-        if (tx < 150) daysVeg = (daysVeg >= step) ? daysVeg - step : 0;
-        else daysVeg += step; 
-    }
-    else if (ty > 150 && ty < 180) { 
-        if (tx < 150) daysFlower = (daysFlower >= step) ? daysFlower - step : 0;
-        else daysFlower += step;
-    }
-    else if (ty > 210 && tx < 160) { 
-        photoSecondsElapsed = inLightMode ? (lightHours * 3600.0 + 1) : 0; 
-    }
-    
-    double lightSecs = lightHours * 3600.0;
-    digitalWrite(RELAY_PIN, (photoSecondsElapsed < lightSecs) ? LOW : HIGH);
-    inLightMode = (photoSecondsElapsed < lightSecs);
-
-    saveState();
-    drawUI();
+  delay(40);
 }
