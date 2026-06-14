@@ -11,6 +11,7 @@
 #include <WiFi.h>
 #include <esp_now.h>
 #include <Preferences.h>
+#include <esp_heap_caps.h>
 
 #define MI_NEGRO    0x0000
 #define MI_BLANCO   0xFFFF
@@ -41,6 +42,11 @@
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite menuSprite = TFT_eSprite(&tft);
 TFT_eSprite valueSprite = TFT_eSprite(&tft);
+TFT_eSprite timeValueSprite = TFT_eSprite(&tft);
+TFT_eSprite topValueSprite = TFT_eSprite(&tft);
+TFT_eSprite vpdValueSprite = TFT_eSprite(&tft);
+TFT_eSprite tdsValueSprite = TFT_eSprite(&tft);
+TFT_eSprite co2ValueSprite = TFT_eSprite(&tft);
 XPT2046_Touchscreen ts(TOUCH_CS);
 Adafruit_BME280 bme;
 Adafruit_AHTX0 aht;
@@ -164,7 +170,11 @@ float calculateVPD(float temp, float hum) {
 bool readTouchScreen(int &tx, int &ty) {
   if (!ts.touched()) return false;
   if (millis() - lastTouchRead < 60) return false;
+#ifdef TFT_CS
+  digitalWrite(TFT_CS, HIGH);
+#endif
   TS_Point p = ts.getPoint();
+  digitalWrite(TOUCH_CS, HIGH);
   tx = constrain(map(p.x, 200, 3800, 319, 0), 0, 319);
   ty = constrain(map(p.y, 200, 3800, 239, 0), 0, 239);
   lastTouchRead = millis();
@@ -278,24 +288,28 @@ void drawStaticBackground() {
 
 }
 
+TFT_eSprite &getValueSprite(int w, int h) {
+  if (w == 86 && h == 16) return timeValueSprite;
+  if (w == 90 && h == 16) return topValueSprite;
+  if (w == 100 && h == 18) return vpdValueSprite;
+  if (w == 140 && h == 18) return tdsValueSprite;
+  return valueSprite;
+}
+
 void pushValue(int x, int y, int w, int h, String text, uint16_t color, uint8_t size, uint8_t datum = TL_DATUM) {
-  if (valueSprite.width() != w || valueSprite.height() != h) {
-    valueSprite.deleteSprite();
-    valueSprite.setColorDepth(8);
-    valueSprite.createSprite(w, h);
-  }
-  valueSprite.fillSprite(MI_NEGRO);
-  valueSprite.setTextColor(color);
-  valueSprite.setTextSize(size);
-  valueSprite.setTextDatum(datum);
+  TFT_eSprite &sprite = getValueSprite(w, h);
+  sprite.fillSprite(MI_NEGRO);
+  sprite.setTextColor(color);
+  sprite.setTextSize(size);
+  sprite.setTextDatum(datum);
   int drawX = 0;
   int drawY = 0;
   if (datum == TC_DATUM || datum == MC_DATUM || datum == BC_DATUM) drawX = w / 2;
   else if (datum == TR_DATUM || datum == MR_DATUM || datum == BR_DATUM) drawX = w - 1;
   if (datum == ML_DATUM || datum == MC_DATUM || datum == MR_DATUM) drawY = h / 2;
   else if (datum == BL_DATUM || datum == BC_DATUM || datum == BR_DATUM) drawY = h - 1;
-  valueSprite.drawString(text, drawX, drawY);
-  valueSprite.pushSprite(x, y);
+  sprite.drawString(text, drawX, drawY);
+  sprite.pushSprite(x, y);
 }
 
 void drawSoilBar(int x, int y, int w, int h, float value, float lastValue, const char *label) {
@@ -449,33 +463,29 @@ void drawCO2HudCard(float co2, bool forceRedraw = false) {
   char numStr[10];
   sprintf(numStr, "%.0f", co2);
 
-  valueSprite.deleteSprite();
-  valueSprite.setColorDepth(8);
-  valueSprite.createSprite(cardW - 8, cardH - 8);
+  // Sprite persistente creado una sola vez en setup(); no destruir/recrear en runtime.
+  co2ValueSprite.fillSprite(bg);
 
-  // IMPORTANTE:
-  valueSprite.fillSprite(bg);
-
-  valueSprite.setTextColor(txt, bg);
-  valueSprite.setTextFont(1);
+  co2ValueSprite.setTextColor(txt, bg);
+  co2ValueSprite.setTextFont(1);
 
   // CO2 pequeño a la izquierda
-  valueSprite.setTextSize(1);
-  valueSprite.setCursor(2, 10);
-  valueSprite.print("CO2");
+  co2ValueSprite.setTextSize(1);
+  co2ValueSprite.setCursor(2, 10);
+  co2ValueSprite.print("CO2");
 
   // número grande
-  valueSprite.setTextSize(2);
-  valueSprite.setCursor(30, 4);
-  valueSprite.print(numStr);
+  co2ValueSprite.setTextSize(2);
+  co2ValueSprite.setCursor(30, 4);
+  co2ValueSprite.print(numStr);
 
   // PPM pequeño
-  valueSprite.setTextSize(1);
-  valueSprite.setCursor(86, 10);
-  valueSprite.print("PPM");
+  co2ValueSprite.setTextSize(1);
+  co2ValueSprite.setCursor(86, 10);
+  co2ValueSprite.print("PPM");
 
   // IMPORTANTE
-  valueSprite.pushSprite(cardX + 4, cardY + 4);
+  co2ValueSprite.pushSprite(cardX + 4, cardY + 4);
 
   lastCO2 = co2;
   }
@@ -590,6 +600,12 @@ void setup() {
   tft.setRotation(1);
   ts.begin();
   ts.setRotation(4);
+  pinMode(TOUCH_CS, OUTPUT);
+  digitalWrite(TOUCH_CS, HIGH);
+#ifdef TFT_CS
+  pinMode(TFT_CS, OUTPUT);
+  digitalWrite(TFT_CS, HIGH);
+#endif
   ads.begin();
   rtc.begin();
   if (!aht.begin()) {
@@ -637,9 +653,19 @@ void setup() {
 
   menuSprite.setColorDepth(16);
   valueSprite.setColorDepth(8);
+  timeValueSprite.setColorDepth(8);
+  topValueSprite.setColorDepth(8);
+  vpdValueSprite.setColorDepth(8);
+  tdsValueSprite.setColorDepth(8);
+  co2ValueSprite.setColorDepth(8);
 
   menuSprite.createSprite(MENU_W, MENU_H);
   valueSprite.createSprite(80, 30);
+  timeValueSprite.createSprite(86, 16);
+  topValueSprite.createSprite(90, 16);
+  vpdValueSprite.createSprite(100, 18);
+  tdsValueSprite.createSprite(140, 18);
+  co2ValueSprite.createSprite(124, 22);
   drawStaticBackground();
   co2CardNeedsFullRedraw = true;
 }
@@ -870,9 +896,12 @@ void loop() {
     lastTouchY = -1;
   }
 
-  if (millis() - lastHeapLogMs >= 5000) {
-    Serial.print("Heap: ");
-    Serial.println(ESP.getFreeHeap());
+  if (millis() - lastHeapLogMs >= 10000) {
+    Serial.printf(
+      "Heap=%u Largest=%u\n",
+      ESP.getFreeHeap(),
+      heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)
+    );
     lastHeapLogMs = millis();
   }
 
