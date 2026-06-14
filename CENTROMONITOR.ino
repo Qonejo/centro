@@ -115,6 +115,7 @@ unsigned long lastHeapLogMs = 0;
 
 bool menuNeedsRedraw = true;
 bool menuVisible = false;
+bool uiNeedsFullRedraw = false;
 
 float lastAirTemp = -999, lastAirHum = -999, lastSoil1 = -999, lastSoil2 = -999, lastPh = -999, lastTds = -999, lastVpd = -999;
 int lastPhIndicatorY = -999;
@@ -132,6 +133,9 @@ const int MENU_X = (320 - MENU_W) / 2, MENU_Y = (240 - MENU_H) / 2;
 void redrawTouchArea(int x, int y);
 void drawPumpButton();
 void drawHumIndicator();
+bool safeTouchTouched();
+TS_Point safeGetTouch();
+void recoverTFT();
 
 void saveSoilThreshold() {
   preferences.putFloat("soilTh", soilThreshold);
@@ -168,17 +172,49 @@ float calculateVPD(float temp, float hum) {
 }
 
 bool readTouchScreen(int &tx, int &ty) {
-  if (!ts.touched()) return false;
   if (millis() - lastTouchRead < 60) return false;
 #ifdef TFT_CS
   digitalWrite(TFT_CS, HIGH);
 #endif
-  TS_Point p = ts.getPoint();
+  if (!safeTouchTouched()) return false;
+  TS_Point p = safeGetTouch();
   digitalWrite(TOUCH_CS, HIGH);
   tx = constrain(map(p.x, 200, 3800, 319, 0), 0, 319);
   ty = constrain(map(p.y, 200, 3800, 239, 0), 0, 239);
   lastTouchRead = millis();
   return true;
+}
+
+bool safeTouchTouched() {
+  SPI.beginTransaction(
+    SPISettings(
+      2500000,
+      MSBFIRST,
+      SPI_MODE0
+    )
+  );
+
+  bool touched = ts.touched();
+
+  SPI.endTransaction();
+  digitalWrite(TOUCH_CS, HIGH);
+  return touched;
+}
+
+TS_Point safeGetTouch() {
+  SPI.beginTransaction(
+    SPISettings(
+      2500000,
+      MSBFIRST,
+      SPI_MODE0
+    )
+  );
+
+  TS_Point p = ts.getPoint();
+
+  SPI.endTransaction();
+  digitalWrite(TOUCH_CS, HIGH);
+  return p;
 }
 
 uint16_t blend565(uint16_t c1, uint16_t c2, uint8_t mix) {
@@ -286,6 +322,14 @@ void drawStaticBackground() {
 
   drawPumpButton();
 
+}
+
+void recoverTFT() {
+  tft.endWrite();
+  tft.init();
+  tft.setRotation(1);
+  drawStaticBackground();
+  uiNeedsFullRedraw = true;
 }
 
 TFT_eSprite &getValueSprite(int w, int h) {
