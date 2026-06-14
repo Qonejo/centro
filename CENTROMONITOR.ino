@@ -849,6 +849,16 @@ void setup() {
 }
 
 void loop() {
+  static uint32_t lastLoopDebug = 0;
+
+  if (millis() - lastLoopDebug > 1000) {
+    Serial.printf(
+        "LOOP OK | Heap=%u\n",
+        ESP.getFreeHeap()
+    );
+    lastLoopDebug = millis();
+  }
+
   bool currentButton = digitalRead(MENU_BUTTON_PIN);
   if (currentButton && !lastButtonState && (millis() - lastMenuDebounceMs > 180)) {
     inMenu = !inMenu;
