@@ -638,25 +638,59 @@ void OnDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, in
 }
 
 void setup() {
+  Serial.println("ANTES SERIAL");
   Serial.begin(115200);
+  Serial.println("DESPUES SERIAL");
+  Serial.println("SETUP 1");
+  Serial.println("ANTES WIRE");
   Wire.begin(21,22);
+  Serial.println("DESPUES WIRE");
+  Serial.println("SETUP 2");
+  Serial.println("ANTES TFT");
   tft.init();
+  Serial.println("DESPUES TFT");
+  Serial.println("SETUP 3");
+  Serial.println("ANTES TFT ROTATION");
   tft.setRotation(1);
+  Serial.println("DESPUES TFT ROTATION");
+  Serial.println("SETUP 4");
+  Serial.println("ANTES TOUCH");
   ts.begin();
+  Serial.println("DESPUES TOUCH");
+  Serial.println("SETUP 5");
+  Serial.println("ANTES TOUCH ROTATION");
   ts.setRotation(4);
+  Serial.println("DESPUES TOUCH ROTATION");
+  Serial.println("SETUP 6");
+  Serial.println("ANTES TOUCH CS PIN");
   pinMode(TOUCH_CS, OUTPUT);
   digitalWrite(TOUCH_CS, HIGH);
+  Serial.println("DESPUES TOUCH CS PIN");
+  Serial.println("SETUP 7");
 #ifdef TFT_CS
+  Serial.println("ANTES TFT CS PIN");
   pinMode(TFT_CS, OUTPUT);
   digitalWrite(TFT_CS, HIGH);
+  Serial.println("DESPUES TFT CS PIN");
+  Serial.println("SETUP 8");
 #endif
+  Serial.println("ANTES ADS");
   ads.begin();
+  Serial.println("DESPUES ADS");
+  Serial.println("SETUP 9");
+  Serial.println("ANTES RTC");
   rtc.begin();
+  Serial.println("DESPUES RTC");
+  Serial.println("SETUP 10");
+  Serial.println("ANTES AHT");
   if (!aht.begin()) {
     Serial.println("AHT10 no encontrado");
   } else {
     Serial.println("AHT10 OK");
   }
+  Serial.println("DESPUES AHT");
+  Serial.println("SETUP 11");
+  Serial.println("ANTES BME");
   if (!bme.begin(0x76)) {
     Serial.println("BME280 no encontrado en 0x76, probando 0x77");
     if (!bme.begin(0x77)) {
@@ -667,51 +701,151 @@ void setup() {
   } else {
     Serial.println("BME280 OK");
   }
+  Serial.println("DESPUES BME");
+  Serial.println("SETUP 12");
+  Serial.println("ANTES RELAY PIN");
   pinMode(RELAY_PIN, OUTPUT);
+  Serial.println("DESPUES RELAY PIN");
+  Serial.println("SETUP 13");
+  Serial.println("ANTES HUMIDIFIER PIN");
   pinMode(HUMIDIFIER_PIN, OUTPUT);
+  Serial.println("DESPUES HUMIDIFIER PIN");
+  Serial.println("SETUP 14");
+  Serial.println("ANTES WATER PUMP PIN");
   pinMode(WATER_PUMP_PIN, OUTPUT);
+  Serial.println("DESPUES WATER PUMP PIN");
+  Serial.println("SETUP 15");
+  Serial.println("ANTES MENU BUTTON PIN");
   pinMode(MENU_BUTTON_PIN, INPUT);
+  Serial.println("DESPUES MENU BUTTON PIN");
+  Serial.println("SETUP 16");
+  Serial.println("ANTES PREFERENCES");
   preferences.begin("centro", false);
   soilThreshold = preferences.getFloat("soilTh", 40.0f);
+  Serial.println("DESPUES PREFERENCES");
+  Serial.println("SETUP 17");
 
+  Serial.println("ANTES WIFI MODE");
   WiFi.mode(WIFI_STA);
-  if (esp_now_init() == ESP_OK) {
+  Serial.println("DESPUES WIFI MODE");
+  Serial.println("SETUP 18");
+  Serial.println("ANTES ESP NOW");
+  esp_err_t espNowInitResult = esp_now_init();
+  Serial.println("DESPUES ESP NOW");
+  Serial.println("SETUP 19");
+  if (espNowInitResult == ESP_OK) {
+    Serial.println("ANTES ESP NOW RECV CB");
     esp_now_register_recv_cb(OnDataRecv);
+    Serial.println("DESPUES ESP NOW RECV CB");
+    Serial.println("SETUP 20");
+    Serial.println("ANTES ESP NOW SEND CB");
     esp_now_register_send_cb(OnDataSent);
+    Serial.println("DESPUES ESP NOW SEND CB");
+    Serial.println("SETUP 21");
+    Serial.println("ANTES ESP NOW PEER FOTOPERIODO");
     esp_now_peer_info_t peerInfo = {};
     memcpy(peerInfo.peer_addr, macFotoperiodo, 6);
     peerInfo.channel = WiFi.channel();
     peerInfo.encrypt = false;
     esp_now_add_peer(&peerInfo);
+    Serial.println("DESPUES ESP NOW PEER FOTOPERIODO");
+    Serial.println("SETUP 22");
 
+    Serial.println("ANTES ESP NOW PEER SOIL");
     esp_now_peer_info_t soilPeerInfo = {};
     memcpy(soilPeerInfo.peer_addr, macSoilNode, 6);
     soilPeerInfo.channel = WiFi.channel();
     soilPeerInfo.encrypt = false;
     esp_now_add_peer(&soilPeerInfo);
+    Serial.println("DESPUES ESP NOW PEER SOIL");
+    Serial.println("SETUP 23");
   }
 
+  Serial.println("ANTES RELAY INIT");
   digitalWrite(RELAY_PIN, HIGH);
+  Serial.println("DESPUES RELAY INIT");
+  Serial.println("SETUP 24");
+  Serial.println("ANTES HUMIDIFIER INIT");
   digitalWrite(HUMIDIFIER_PIN, LOW);
+  Serial.println("DESPUES HUMIDIFIER INIT");
+  Serial.println("SETUP 25");
+  Serial.println("ANTES WATER PUMP INIT");
   digitalWrite(WATER_PUMP_PIN, HIGH);
+  Serial.println("DESPUES WATER PUMP INIT");
+  Serial.println("SETUP 26");
 
+  Serial.println("ANTES MENU SPRITE DEPTH");
   menuSprite.setColorDepth(16);
+  Serial.println("DESPUES MENU SPRITE DEPTH");
+  Serial.println("SETUP 27");
+  Serial.println("ANTES VALUE SPRITE DEPTH");
   valueSprite.setColorDepth(8);
+  Serial.println("DESPUES VALUE SPRITE DEPTH");
+  Serial.println("SETUP 28");
+  Serial.println("ANTES TIME VALUE SPRITE DEPTH");
   timeValueSprite.setColorDepth(8);
+  Serial.println("DESPUES TIME VALUE SPRITE DEPTH");
+  Serial.println("SETUP 29");
+  Serial.println("ANTES TOP VALUE SPRITE DEPTH");
   topValueSprite.setColorDepth(8);
+  Serial.println("DESPUES TOP VALUE SPRITE DEPTH");
+  Serial.println("SETUP 30");
+  Serial.println("ANTES VPD VALUE SPRITE DEPTH");
   vpdValueSprite.setColorDepth(8);
+  Serial.println("DESPUES VPD VALUE SPRITE DEPTH");
+  Serial.println("SETUP 31");
+  Serial.println("ANTES TDS VALUE SPRITE DEPTH");
   tdsValueSprite.setColorDepth(8);
+  Serial.println("DESPUES TDS VALUE SPRITE DEPTH");
+  Serial.println("SETUP 32");
+  Serial.println("ANTES CO2 VALUE SPRITE DEPTH");
   co2ValueSprite.setColorDepth(8);
+  Serial.println("DESPUES CO2 VALUE SPRITE DEPTH");
+  Serial.println("SETUP 33");
 
+  Serial.println("ANTES SPRITE MENU");
   menuSprite.createSprite(MENU_W, MENU_H);
+  Serial.println("DESPUES SPRITE MENU");
+  Serial.printf("HEAP=%u\n", ESP.getFreeHeap());
+  Serial.println("SETUP 34");
+  Serial.println("ANTES SPRITE VALUE");
   valueSprite.createSprite(80, 30);
+  Serial.println("DESPUES SPRITE VALUE");
+  Serial.printf("HEAP=%u\n", ESP.getFreeHeap());
+  Serial.println("SETUP 35");
+  Serial.println("ANTES SPRITE TIME VALUE");
   timeValueSprite.createSprite(86, 16);
+  Serial.println("DESPUES SPRITE TIME VALUE");
+  Serial.printf("HEAP=%u\n", ESP.getFreeHeap());
+  Serial.println("SETUP 36");
+  Serial.println("ANTES SPRITE TOP VALUE");
   topValueSprite.createSprite(90, 16);
+  Serial.println("DESPUES SPRITE TOP VALUE");
+  Serial.printf("HEAP=%u\n", ESP.getFreeHeap());
+  Serial.println("SETUP 37");
+  Serial.println("ANTES SPRITE VPD VALUE");
   vpdValueSprite.createSprite(100, 18);
+  Serial.println("DESPUES SPRITE VPD VALUE");
+  Serial.printf("HEAP=%u\n", ESP.getFreeHeap());
+  Serial.println("SETUP 38");
+  Serial.println("ANTES SPRITE TDS VALUE");
   tdsValueSprite.createSprite(140, 18);
+  Serial.println("DESPUES SPRITE TDS VALUE");
+  Serial.printf("HEAP=%u\n", ESP.getFreeHeap());
+  Serial.println("SETUP 39");
+  Serial.println("ANTES SPRITE CO2");
   co2ValueSprite.createSprite(124, 22);
+  Serial.println("DESPUES SPRITE CO2");
+  Serial.printf("HEAP=%u\n", ESP.getFreeHeap());
+  Serial.println("SETUP 40");
+  Serial.println("ANTES STATIC BACKGROUND");
   drawStaticBackground();
+  Serial.println("DESPUES STATIC BACKGROUND");
+  Serial.println("SETUP 41");
+  Serial.println("ANTES CO2 FULL REDRAW FLAG");
   co2CardNeedsFullRedraw = true;
+  Serial.println("DESPUES CO2 FULL REDRAW FLAG");
+  Serial.println("SETUP 42");
 }
 
 void loop() {
